@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -19,8 +19,22 @@ import {
 } from '@/components/ui';
 import { useToast } from '@/components/toast';
 
-import { getChallengeById } from '@/repositories/challengeRepository';
-import { recordChallengeAttempt } from '@/repositories/progressRepository';
+import {
+  getChallengeById,
+  getChallenges,
+} from '@/repositories/challengeRepository';
+import {
+  getCompletedChallengeIds,
+  recordChallengeAttempt,
+} from '@/repositories/progressRepository';
+import { getLessons } from '@/repositories/lessonRepository';
+import { getTopics } from '@/repositories/topicRepository';
+
+import {
+  buildPracticeIndex,
+  selectNextChallenge,
+} from '@/practice/practiceLogic';
+
 import type { CodeChallenge } from '@/code/challengeTypes';
 import type {
   CodeChallengeResult,
@@ -56,6 +70,14 @@ export default function ChallengeScreen() {
   const [code, setCode] = useState('');
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<CodeChallengeResult | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [revealedHints, setRevealedHints] = useState(0);
+  const [nextId, setNextId] = useState<string | null>(null);
+
+  const practiceIndexRef = useRef<
+    ReturnType<typeof buildPracticeIndex> | null
+  >(null);
+  const completedIdsRef = useRef<ReadonlySet<string>>(new Set());
 
   const insets = useSafeAreaInsets();
   const { showToast } = useToast();
@@ -80,12 +102,32 @@ export default function ChallengeScreen() {
       .catch(() => setLoadError(true))
       .finally(() => clearInterval(interval));
 
+    Promise.all([
+      getChallenges(),
+      getLessons(),
+      getTopics(),
+      getCompletedChallengeIds(),
+    ])
+      .then(([challenges, lessons, topics, completed]) => {
+        practiceIndexRef.current = buildPracticeIndex(
+          challenges,
+          lessons,
+          topics
+        );
+        completedIdsRef.current = new Set(completed);
+      })
+      .catch(() => {
+        // Non-blocking: next-practice selection is best-effort.
+      });
+
     return () => clearInterval(interval);
   }, [id]);
 
   function applyChallenge(next: CodeChallenge) {
     setChallenge(next);
     setResult(null);
+    setRunError(null);
+    setRevealedHints(0);
     if (next.starterCode) {
       setCode(next.starterCode);
     }
@@ -112,37 +154,71 @@ export default function ChallengeScreen() {
   async function runCode() {
     if (!challenge) return;
 
+    if (getJavaScriptEngine().getStatus() !== 'available') {
+      showToast(
+        'Code engine is still loading — please try again.',
+        'info'
+      );
+      return;
+    }
+
     setRunning(true);
     setResult(null);
+    setRunError(null);
 
-    const challengeResult = await executeChallenge(
-      code,
-      challenge.functionName,
-      challenge.tests
-    );
-
-    setResult(challengeResult);
-    setRunning(false);
-
-    if (challengeResult.passed) {
-      showToast(
-        `All tests passed (${challengeResult.testsPassed}/${challengeResult.testsTotal})!`,
-        'success'
+    try {
+      const challengeResult = await executeChallenge(
+        code,
+        challenge.functionName,
+        challenge.tests
       );
 
-      recordChallengeAttempt({
-        challengeId: challenge.id,
-        testsPassed: challengeResult.testsPassed,
-        testsTotal: challengeResult.testsTotal,
-        passed: challengeResult.passed,
-      }).catch(() => {
-        // Non-blocking: progress recording failure should not block the result.
-      });
-    } else {
+      setResult(challengeResult);
+
+      if (challengeResult.passed) {
+        showToast(
+          `All tests passed (${challengeResult.testsPassed}/${challengeResult.testsTotal})!`,
+          'success'
+        );
+
+        recordChallengeAttempt({
+          challengeId: challenge.id,
+          testsPassed: challengeResult.testsPassed,
+          testsTotal: challengeResult.testsTotal,
+          passed: challengeResult.passed,
+        }).catch(() => {
+          // Non-blocking: progress recording failure should not block the result.
+        });
+
+        const index = practiceIndexRef.current;
+        if (index) {
+          const completed = new Set(completedIdsRef.current);
+          completed.add(challenge.id);
+          setNextId(selectNextChallenge(index, completed, challenge.id));
+        }
+      } else {
+        showToast(
+          `${challengeResult.testsPassed}/${challengeResult.testsTotal} tests passed`,
+          'error'
+        );
+      }
+    } catch (error) {
+      const timedOut =
+        error instanceof Error &&
+        (error.name === 'TimeoutError' ||
+          /timed out/i.test(error.message));
+
+      setRunError(
+        timedOut
+          ? 'Your code timed out.'
+          : 'Could not run your code.'
+      );
       showToast(
-        `${challengeResult.testsPassed}/${challengeResult.testsTotal} tests passed`,
+        timedOut ? 'Your code timed out.' : 'Could not run your code.',
         'error'
       );
+    } finally {
+      setRunning(false);
     }
   }
 
@@ -229,6 +305,28 @@ export default function ChallengeScreen() {
           />
         </FadeInView>
 
+        {runError && (
+          <FadeInView>
+            <View style={styles.errorPanel}>
+              <View style={styles.resultsHeader}>
+                <Ionicons
+                  name="alert-circle"
+                  size={22}
+                  color={colors.status.error}
+                />
+                <AppText variant="body" style={styles.errorTitle}>
+                  {runError}
+                </AppText>
+              </View>
+              <Button
+                title="Retry"
+                variant="ghost"
+                onPress={runCode}
+              />
+            </View>
+          </FadeInView>
+        )}
+
         <FadeInView>
           <Card>
             <AppText variant="h3">Test Cases</AppText>
@@ -252,9 +350,56 @@ export default function ChallengeScreen() {
           </Card>
         </FadeInView>
 
+        {revealedHints < challenge.hints.length && (
+          <FadeInView>
+            <Button
+              title={
+                revealedHints === 0
+                  ? 'Show hint'
+                  : `Show next hint (${revealedHints}/${challenge.hints.length})`
+              }
+              variant="ghost"
+              onPress={() => setRevealedHints((v) => v + 1)}
+            />
+          </FadeInView>
+        )}
+
+        {revealedHints > 0 && (
+          <FadeInView>
+            <View style={styles.hintsPanel}>
+              {challenge.hints
+                .slice(0, revealedHints)
+                .map((hint, idx) => (
+                  <View key={idx} style={styles.hintItem}>
+                    <View style={styles.hintItemHeader}>
+                      <Ionicons
+                        name="bulb-outline"
+                        size={14}
+                        color={colors.status.warning}
+                      />
+                      <AppText
+                        variant="caption"
+                        style={styles.hintItemLabel}
+                      >
+                        Hint {idx + 1}
+                      </AppText>
+                    </View>
+                    <AppText variant="bodySmall">
+                      {hint}
+                    </AppText>
+                  </View>
+                ))}
+            </View>
+          </FadeInView>
+        )}
+
         {result && (
           <FadeInView>
-            <ResultsPanel result={result} onContinue={() => router.back()} />
+            <ResultsPanel
+              result={result}
+              onNext={nextId ? () => router.replace(`/challenge/${nextId}`) : undefined}
+              onContinue={() => router.back()}
+            />
           </FadeInView>
         )}
       </ScrollView>
@@ -351,9 +496,11 @@ function TestCase({
 
 function ResultsPanel({
   result,
+  onNext,
   onContinue,
 }: {
   result: CodeChallengeResult;
+  onNext?: () => void;
   onContinue: () => void;
 }) {
   const { colors } = useTheme();
@@ -375,7 +522,14 @@ function ResultsPanel({
         <AppText variant="bodySmall" muted>
           You passed {result.testsPassed} of {result.testsTotal} tests.
         </AppText>
-        <Button title="Continue" onPress={onContinue} />
+        {onNext ? (
+          <>
+            <Button title="Next Practice" onPress={onNext} />
+            <Button title="Back to Practice" variant="ghost" onPress={onContinue} />
+          </>
+        ) : (
+          <Button title="Continue" onPress={onContinue} />
+        )}
       </View>
     );
   }
@@ -531,5 +685,43 @@ const makeStyles = (colors: ThemeColors) =>
 
     resultsTitle: {
       color: colors.text.primary,
+    },
+
+    errorPanel: {
+      padding: spacing.md,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.status.error + '99',
+      backgroundColor: colors.status.error + '14',
+      gap: spacing.md,
+    },
+
+    errorTitle: {
+      color: colors.status.error,
+      fontWeight: '600',
+    },
+
+    hintsPanel: {
+      gap: spacing.sm,
+    },
+
+    hintItem: {
+      padding: spacing.md,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.status.warning + '0f',
+      gap: spacing.sm,
+    },
+
+    hintItemHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+
+    hintItemLabel: {
+      color: colors.status.warning,
+      fontWeight: '600',
     },
   });

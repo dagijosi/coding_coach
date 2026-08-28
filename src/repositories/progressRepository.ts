@@ -356,6 +356,58 @@ export async function getAttemptedChallengeIds(): Promise<string[]> {
   return rows.map((row) => row.challenge_id);
 }
 
+export type RecentChallengeAttempt = {
+  challengeId: string;
+  title: string;
+  passed: boolean;
+  testsPassed: number;
+  testsTotal: number;
+  attemptedAt: string;
+};
+
+/**
+ * Most recent challenge attempts, newest first, limited to `limit` entries.
+ * Used to power the compact practice history and to determine what to resume.
+ */
+export async function getRecentChallengeAttempts(
+  limit = 6
+): Promise<RecentChallengeAttempt[]> {
+  const db = await getDatabase();
+
+  const rows = await db.getAllAsync<{
+    challenge_id: string;
+    title: string | null;
+    passed: number;
+    tests_passed: number;
+    tests_total: number;
+    attempted_at: string;
+  }>(
+    `
+      SELECT
+        ca.challenge_id,
+        c.title AS title,
+        ca.passed,
+        ca.tests_passed,
+        ca.tests_total,
+        ca.attempted_at
+      FROM challenge_attempts ca
+      LEFT JOIN challenges c ON c.id = ca.challenge_id
+      ORDER BY ca.attempted_at DESC
+      LIMIT ?
+    `,
+    limit
+  );
+
+  return rows.map((row) => ({
+    challengeId: row.challenge_id,
+    title: row.title ?? 'Unknown challenge',
+    passed: row.passed === 1,
+    testsPassed: row.tests_passed,
+    testsTotal: row.tests_total,
+    attemptedAt: row.attempted_at,
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Lessons
 // ---------------------------------------------------------------------------
