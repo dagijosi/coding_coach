@@ -409,8 +409,68 @@ export async function getRecentChallengeAttempts(
 }
 
 // ---------------------------------------------------------------------------
-// Lessons
+// Daily challenge
 // ---------------------------------------------------------------------------
+
+export type DailyChallengeState = 'completed' | 'attempted' | 'not-started';
+
+/**
+ * Derives the learner's state for the given day's daily challenge from the
+ * existing challenge attempt history (no extra tracking table required).
+ *
+ *  - 'completed'   a passed attempt exists on the same calendar day
+ *  - 'attempted'   an attempt (any outcome) exists on the same calendar day
+ *  - 'not-started' no attempt on the same calendar day
+ *
+ * Because it is derived from SQLite, the state survives app restarts.
+ */
+export async function getDailyChallengeState(
+  challengeId: string,
+  date: Date
+): Promise<DailyChallengeState> {
+  const db = await getDatabase();
+
+  const row = await db.getFirstAsync<{
+    last_passed_at: string | null;
+    last_attempted_at: string | null;
+  }>(
+    `
+      SELECT
+        MAX(CASE WHEN passed = 1 THEN attempted_at END) AS last_passed_at,
+        MAX(attempted_at) AS last_attempted_at
+      FROM challenge_attempts
+      WHERE challenge_id = ?
+    `,
+    challengeId
+  );
+
+  const todayKey = toDateKey(date);
+
+  if (
+    row?.last_passed_at &&
+    toDateKey(new Date(row.last_passed_at)) === todayKey
+  ) {
+    return 'completed';
+  }
+
+  if (
+    row?.last_attempted_at &&
+    toDateKey(new Date(row.last_attempted_at)) === todayKey
+  ) {
+    return 'attempted';
+  }
+
+  return 'not-started';
+}
+
+function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+
 
 export async function startLesson(
   lessonId: string
@@ -429,6 +489,47 @@ export async function startLesson(
     `,
     lessonId,
     new Date().toISOString()
+  );
+}
+
+/**
+ * Persists the learner's current position within a lesson so they can resume
+ * where they left off after leaving/reopening. Stores the current step as a
+ * fraction (stepIndex + 1) / totalSteps in the existing `progress` column.
+ *
+ * A completed lesson is never rolled back: its `progress` stays at 1 and its
+ * status stays 'completed'.
+ */
+export async function updateLessonStep(
+  lessonId: string,
+  stepIndex: number,
+  totalSteps: number
+) {
+  const db = await getDatabase();
+
+  const progress =
+    totalSteps > 0 ? (stepIndex + 1) / totalSteps : 0;
+
+  await db.runAsync(
+    `
+      INSERT INTO lesson_progress (
+        lesson_id,
+        status,
+        started_at,
+        progress
+      )
+      VALUES (?, 'in-progress', ?, ?)
+      ON CONFLICT(lesson_id)
+      DO UPDATE SET
+        progress = CASE
+          WHEN lesson_progress.status = 'completed'
+            THEN lesson_progress.progress
+          ELSE excluded.progress
+        END
+    `,
+    lessonId,
+    new Date().toISOString(),
+    progress
   );
 }
 

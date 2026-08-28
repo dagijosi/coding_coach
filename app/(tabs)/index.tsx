@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   Pressable,
   StyleSheet,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import {
   AppText,
@@ -25,9 +27,12 @@ import { getChallenges } from '@/repositories/challengeRepository';
 import {
   getCompletedLessonsCount,
   getContinueLearningLessonId,
+  getDailyChallengeState,
   getLessonProgressById,
   getUserProgress,
+  LEARNING_XP,
 } from '@/repositories/progressRepository';
+import type { DailyChallengeState } from '@/repositories/progressRepository';
 import type { Lesson } from '@/types/lesson';
 import type { Challenge } from '@/types/learning';
 import type { UserProgress } from '@/types/progress';
@@ -55,8 +60,14 @@ export default function HomeScreen() {
   const [progress, setProgress] = useState<UserProgress | null>(null);
   const [lessonsCompleted, setLessonsCompleted] = useState(0);
   const [lessonsTotal, setLessonsTotal] = useState(0);
+  const [dailyState, setDailyState] =
+    useState<DailyChallengeState>('not-started');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  const prevStreak = useRef(0);
+  const firstStreak = useRef(true);
+  const streakPop = useRef(new Animated.Value(1)).current;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,6 +92,35 @@ export default function HomeScreen() {
       setLessonsCompleted(completed);
       setLessonsTotal(lessons.length);
 
+      const today = new Date();
+      const todayChallenge = pickDailyItem(challenges, today);
+      if (todayChallenge) {
+        getDailyChallengeState(todayChallenge.id, today)
+          .then(setDailyState)
+          .catch(() => {
+            // Non-blocking.
+          });
+      }
+
+      if (user) {
+        const current = user.currentStreak ?? 0;
+        if (firstStreak.current) {
+          firstStreak.current = false;
+          prevStreak.current = current;
+        } else if (current > prevStreak.current) {
+          prevStreak.current = current;
+          streakPop.setValue(0.85);
+          Animated.timing(streakPop, {
+            toValue: 1,
+            duration: 420,
+            easing: Easing.out(Easing.elastic(1)),
+            useNativeDriver: true,
+          }).start();
+        } else {
+          prevStreak.current = current;
+        }
+      }
+
       if (first) {
         const p = await getLessonProgressById(first.id);
         setLessonProgress(p.progress);
@@ -96,6 +136,46 @@ export default function HomeScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const refreshOnFocus = useCallback(() => {
+    getUserProgress()
+      .then((user) => {
+        setProgress(user);
+        const current = user.currentStreak ?? 0;
+        if (current > prevStreak.current) {
+          prevStreak.current = current;
+          streakPop.setValue(0.85);
+          Animated.timing(streakPop, {
+            toValue: 1,
+            duration: 420,
+            easing: Easing.out(Easing.elastic(1)),
+            useNativeDriver: true,
+          }).start();
+        } else {
+          prevStreak.current = current;
+        }
+      })
+      .catch(() => {
+        // Non-blocking.
+      });
+
+    if (challenges.length === 0) return;
+    const today = new Date();
+    const c = pickDailyItem(challenges, today);
+    if (c) {
+      getDailyChallengeState(c.id, today)
+        .then(setDailyState)
+        .catch(() => {
+          // Non-blocking.
+        });
+    }
+  }, [challenges, streakPop]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshOnFocus();
+    }, [refreshOnFocus])
+  );
 
   if (loading) {
     return (
@@ -135,7 +215,12 @@ export default function HomeScreen() {
           </AppText>
         </View>
 
-        <View style={styles.streak}>
+        <Animated.View
+          style={[
+            styles.streak,
+            { transform: [{ scale: streakPop }] },
+          ]}
+        >
           <Ionicons
             name="flame"
             size={20}
@@ -144,7 +229,7 @@ export default function HomeScreen() {
           <AppText variant="body" style={styles.streakText}>
             {streak}
           </AppText>
-        </View>
+        </Animated.View>
       </View>
 
       {/* Your Progress */}
@@ -235,12 +320,7 @@ export default function HomeScreen() {
             day: 'numeric',
           })}
         />
-        <Card
-          onPress={() =>
-            challenge &&
-            router.push(`/challenge/${challenge.id}`)
-          }
-        >
+        <Card>
           <View style={styles.row}>
             <View style={styles.lightningIcon}>
               <Ionicons
@@ -276,16 +356,46 @@ export default function HomeScreen() {
           </View>
 
           {challenge && (
-            <View style={styles.cardFooter}>
-              <AppText variant="caption" muted>
-                Solve today's challenge
-              </AppText>
-              <Ionicons
-                name="arrow-forward"
-                size={20}
-                color={colors.text.secondary}
+            <>
+              <View style={styles.rewardRow}>
+                <Ionicons
+                  name="flash"
+                  size={15}
+                  color={colors.status.warning}
+                />
+                <AppText variant="caption" muted>
+                  +{LEARNING_XP.challengeComplete} XP
+                </AppText>
+              </View>
+
+              {dailyState === 'completed' && (
+                <View style={styles.completedRow}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color={colors.status.success}
+                  />
+                  <AppText
+                    variant="bodySmall"
+                    style={styles.completedText}
+                  >
+                    Daily Challenge Complete
+                  </AppText>
+                </View>
+              )}
+
+              <Button
+                title={
+                  dailyState === 'completed'
+                    ? 'View Challenge'
+                    : dailyState === 'attempted'
+                    ? 'Continue Challenge'
+                    : 'Start Challenge'
+                }
+                variant={dailyState === 'completed' ? 'ghost' : 'primary'}
+                onPress={() => router.push(`/challenge/${challenge.id}`)}
               />
-            </View>
+            </>
           )}
         </Card>
       </View>
@@ -460,14 +570,23 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: hexWithAlpha(colors.status.warning, 0.15),
     },
 
-    cardFooter: {
+    rewardRow: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
-      marginTop: spacing.lg,
-      paddingTop: spacing.md,
-      borderTopWidth: 1,
-      borderTopColor: colors.border.default,
+      gap: spacing.xs,
+      marginTop: spacing.md,
+    },
+
+    completedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginTop: spacing.md,
+    },
+
+    completedText: {
+      color: colors.status.success,
+      fontWeight: '600',
     },
 
     quickRow: {

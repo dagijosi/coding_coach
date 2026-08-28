@@ -36,9 +36,11 @@ import { getProblemsByLesson } from '@/repositories/problemRepository';
 import { getChallengesByLesson } from '@/repositories/challengeRepository';
 import {
   completeLesson,
+  getLessonProgressById,
   recordChallengeAttempt,
   recordProblemAttempt,
   startLesson,
+  updateLessonStep,
 } from '@/repositories/progressRepository';
 
 import type { Lesson, LessonContent } from '@/types/lesson';
@@ -113,6 +115,17 @@ const DEFAULT_TRY_IT: TryItConfig = {
     'Edit the function or its input and press Run to see what it returns.',
 };
 
+/**
+ * Converts a stored `progress` fraction (0..1) back to a step index.
+ * `updateLessonStep` stores (stepIndex + 1) / totalSteps, so the inverse
+ * layout of the steps recovers the same index, clamped to valid bounds.
+ */
+function progressToIndex(progress: number, totalSteps: number): number {
+  if (totalSteps <= 0) return 0;
+  const index = Math.round(progress * totalSteps) - 1;
+  return Math.max(0, Math.min(index, totalSteps - 1));
+}
+
 export default function LessonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -135,6 +148,7 @@ export default function LessonScreen() {
   const solvedProblems = useRef<Set<string>>(new Set());
   const passedChallenges = useRef<Set<string>>(new Set());
   const [, forceUpdate] = useReducer((x) => x + 1, 0);
+  const didRestore = useRef(false);
 
   useEffect(() => {
     if (!id) return;
@@ -232,6 +246,32 @@ export default function LessonScreen() {
     },
     []
   );
+
+  // Restore the learner's last position once the lesson content is ready.
+  useEffect(() => {
+    if (!lesson || steps.length === 0 || didRestore.current) return;
+
+    getLessonProgressById(lesson.id)
+      .then((saved) => {
+        setCurrentIndex(
+          progressToIndex(saved.progress, steps.length)
+        );
+      })
+      .catch(() => {
+        // Not resumable — start from the beginning.
+      })
+      .finally(() => {
+        didRestore.current = true;
+      });
+  }, [lesson, steps.length]);
+
+  // Persist the current step whenever the learner navigates.
+  useEffect(() => {
+    if (!lesson || steps.length === 0 || !didRestore.current) return;
+    updateLessonStep(lesson.id, currentIndex, steps.length).catch(() => {
+      // Non-blocking: step persistence must never interrupt the lesson.
+    });
+  }, [lesson, currentIndex, steps.length]);
 
   if (loadError) {
     return (
