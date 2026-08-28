@@ -3,6 +3,7 @@ import {
   StyleSheet,
   View,
   type ScrollViewProps,
+  type StyleProp,
   type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,10 +14,10 @@ import {
   type ThemeColors,
 } from '@/theme';
 
-type ScreenProps = ScrollViewProps & {
+export type ScreenProps = ScrollViewProps & {
   children: React.ReactNode;
   scroll?: boolean;
-  contentStyle?: ViewStyle;
+  contentStyle?: StyleProp<ViewStyle>;
 };
 
 export function Screen({
@@ -27,12 +28,15 @@ export function Screen({
 }: ScreenProps) {
   const styles = useThemedStyles(makeStyles);
 
+  const merged: StyleProp<ViewStyle> = [
+    styles.container,
+    ...(Array.isArray(contentStyle) ? contentStyle : [contentStyle]),
+  ];
+
   if (!scroll) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-        <View style={[styles.container, contentStyle]}>
-          {children}
-        </View>
+        <View style={merged}>{children}</View>
       </SafeAreaView>
     );
   }
@@ -41,7 +45,7 @@ export function Screen({
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.container, contentStyle]}
+        contentContainerStyle={merged}
         showsVerticalScrollIndicator={false}
         {...props}
       >
@@ -57,9 +61,11 @@ const makeStyles = (colors: ThemeColors) =>
       flex: 1,
       backgroundColor: colors.background.primary,
     },
+
     scroll: {
       flex: 1,
     },
+
     container: {
       flexGrow: 1,
       padding: spacing.md,

@@ -10,4 +10,5 @@ export { IconButton } from './IconButton';
 export { LoadingState } from './LoadingState';
 export { ProgressBar } from './ProgressBar';
 export { Screen } from './Screen';
+export type { ScreenProps } from './Screen';
 export { SectionHeader } from './SectionHeader';

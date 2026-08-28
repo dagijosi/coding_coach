@@ -7,10 +7,10 @@ import {
   Card,
   ErrorState,
   LoadingState,
-  Screen,
   SectionHeader,
   ProgressBar,
 } from '@/components/ui';
+import { TabScreen } from '@/components/navigation';
 
 import {
   getTopicPerformance,
@@ -97,21 +97,21 @@ export default function ProfileScreen() {
 
   if (error) {
     return (
-      <Screen scroll={false}>
+      <TabScreen scroll={false}>
         <ErrorState
           full
           title="Couldn't load your profile"
           onRetry={load}
         />
-      </Screen>
+      </TabScreen>
     );
   }
 
   if (!data) {
     return (
-      <Screen scroll={false}>
+      <TabScreen scroll={false}>
         <LoadingState full message="Loading profile..." />
-      </Screen>
+      </TabScreen>
     );
   }
 
@@ -128,7 +128,7 @@ export default function ProfileScreen() {
   const strongTopics = [...sortedByMastery].reverse().slice(0, 3);
 
   return (
-    <Screen>
+    <TabScreen>
       {/* Identity */}
       <SectionHeader
         title="Profile"
@@ -226,7 +226,7 @@ export default function ProfileScreen() {
         <SectionHeader title="Settings" icon="settings-outline" />
         <AppearanceSettings />
       </View>
-    </Screen>
+    </TabScreen>
   );
 }
 

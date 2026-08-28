@@ -15,9 +15,9 @@ import {
   ErrorState,
   LoadingState,
   ProgressBar,
-  Screen,
   SectionHeader,
 } from '@/components/ui';
+import { TabScreen } from '@/components/navigation';
 
 import { getLessons } from '@/repositories/lessonRepository';
 import { getTopics } from '@/repositories/topicRepository';
@@ -97,17 +97,17 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <Screen>
+      <TabScreen>
         <LoadingState message="Loading your dashboard..." />
-      </Screen>
+      </TabScreen>
     );
   }
 
   if (error) {
     return (
-      <Screen>
+      <TabScreen>
         <ErrorState title="Couldn't load your dashboard" onRetry={load} />
-      </Screen>
+      </TabScreen>
     );
   }
 
@@ -120,7 +120,7 @@ export default function HomeScreen() {
   const challenge = pickDailyItem(challenges, today);
 
   return (
-    <Screen>
+    <TabScreen>
       {/* Greeting */}
       <View style={styles.header}>
         <View style={{ gap: spacing.xs }}>
@@ -300,9 +300,9 @@ export default function HomeScreen() {
           />
           <QuickAction
             icon="code-slash-outline"
-            label="Problems"
+            label="Practice"
             color={colors.accent.primary}
-            onPress={() => router.push('/problems')}
+            onPress={() => router.push('/practice')}
           />
           <QuickAction
             icon="person-outline"
@@ -312,7 +312,7 @@ export default function HomeScreen() {
           />
         </View>
       </View>
-    </Screen>
+    </TabScreen>
   );
 }
 

@@ -15,8 +15,8 @@ import {
   ErrorState,
   FadeInView,
   LoadingState,
-  Screen,
 } from '@/components/ui';
+import { TabScreen } from '@/components/navigation';
 
 import { getProblems } from '@/repositories/problemRepository';
 import { getLessons } from '@/repositories/lessonRepository';
@@ -46,7 +46,7 @@ const DIFFICULTY_TINT: Record<Problem['difficulty'], 'success' | 'warning' | 'er
   hard: 'error',
 };
 
-export default function ProblemsScreen() {
+export default function PracticeScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -113,25 +113,25 @@ export default function ProblemsScreen() {
 
   if (loading) {
     return (
-      <Screen>
-        <ScreenHeader title="Problems" subtitle="Practice concepts and sharpen your skills." />
+      <TabScreen>
+        <ScreenHeader title="Practice" subtitle="Sharpen your skills with hands-on problems." />
         <LoadingState message="Loading problems..." />
-      </Screen>
+      </TabScreen>
     );
   }
 
   if (error) {
     return (
-      <Screen>
-        <ScreenHeader title="Problems" subtitle="Practice concepts and sharpen your skills." />
+      <TabScreen>
+        <ScreenHeader title="Practice" subtitle="Sharpen your skills with hands-on problems." />
         <ErrorState title="Couldn't load problems" onRetry={load} />
-      </Screen>
+      </TabScreen>
     );
   }
 
   return (
-    <Screen>
-      <ScreenHeader title="Problems" subtitle="Practice concepts and sharpen your skills." />
+    <TabScreen>
+      <ScreenHeader title="Practice" subtitle="Sharpen your skills with hands-on problems." />
 
       {/* Search */}
       <View style={styles.searchWrap}>
@@ -233,7 +233,7 @@ export default function ProblemsScreen() {
           ))}
         </View>
       )}
-    </Screen>
+    </TabScreen>
   );
 }
 

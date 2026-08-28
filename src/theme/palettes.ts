@@ -22,6 +22,8 @@ export type ThemeColors = {
   accent: {
     primary: string;
     secondary: string;
+    soft: string;
+    pressed: string;
   };
   status: {
     success: string;
@@ -42,45 +44,47 @@ export type ThemeColors = {
 // Muted green is the Coding Coach brand accent shared across both themes.
 export const lightColors: ThemeColors = {
   background: {
-    primary: '#F6F7F5',
-    secondary: '#EDEFEC',
-    tertiary: '#E5E8E4',
+    primary: '#F3F5F2',
+    secondary: '#EDF0EC',
+    tertiary: '#E7EAE6',
   },
 
   surface: {
     primary: '#FFFFFF',
-    secondary: '#F0F2EF',
-    elevated: '#F5F6F4',
+    secondary: '#F3F5F2',
+    elevated: '#EEF2EF',
   },
 
   border: {
-    default: '#DDE2DE',
-    strong: '#C4CBC6',
+    default: '#D5DDD8',
+    strong: '#C1CCC5',
   },
 
   text: {
-    primary: '#202522',
-    secondary: '#69716C',
-    muted: '#8B948F',
+    primary: '#17211C',
+    secondary: '#5D6962',
+    muted: '#87918B',
     inverse: '#FFFFFF',
   },
 
   accent: {
-    primary: '#3F6B57',
-    secondary: '#5E7E6E',
+    primary: '#245A46',
+    secondary: '#4A7B63',
+    soft: '#DCEBE3',
+    pressed: '#1D4938',
   },
 
   status: {
-    success: '#4E765C',
-    warning: '#A27B45',
-    error: '#A85D5D',
+    success: '#2F6B50',
+    warning: '#C9954A',
+    error: '#B4534A',
     info: '#4A6E8C',
   },
 
   difficulty: {
-    easy: '#4E765C',
-    medium: '#A27B45',
-    hard: '#A85D5D',
+    easy: '#2F6B50',
+    medium: '#C9954A',
+    hard: '#B4534A',
   },
 
   white: '#FFFFFF',
@@ -89,45 +93,47 @@ export const lightColors: ThemeColors = {
 
 export const darkColors: ThemeColors = {
   background: {
-    primary: '#151817',
-    secondary: '#1B1F1D',
-    tertiary: '#202523',
+    primary: '#0C120F',
+    secondary: '#101713',
+    tertiary: '#141D19',
   },
 
   surface: {
-    primary: '#1D211F',
-    secondary: '#252A27',
-    elevated: '#2A2F2C',
+    primary: '#141C18',
+    secondary: '#1A241F',
+    elevated: '#1B2621',
   },
 
   border: {
-    default: '#303733',
-    strong: '#3B433E',
+    default: '#29342E',
+    strong: '#34413A',
   },
 
   text: {
-    primary: '#E7EBE8',
-    secondary: '#9CA59F',
-    muted: '#6C746F',
-    inverse: '#0C120E',
+    primary: '#E9F0EC',
+    secondary: '#9CA9A1',
+    muted: '#6B7871',
+    inverse: '#0D1511',
   },
 
   accent: {
-    primary: '#78A88D',
-    secondary: '#7FA8A0',
+    primary: '#72B394',
+    secondary: '#8BC3A8',
+    soft: '#263F33',
+    pressed: '#85C5A2',
   },
 
   status: {
     success: '#7FA98A',
-    warning: '#C19A61',
-    error: '#C47A7A',
+    warning: '#C9954A',
+    error: '#CE7B74',
     info: '#7C9DB8',
   },
 
   difficulty: {
     easy: '#7FA98A',
-    medium: '#C19A61',
-    hard: '#C47A7A',
+    medium: '#C9954A',
+    hard: '#CE7B74',
   },
 
   white: '#FFFFFF',

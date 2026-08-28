@@ -10,9 +10,9 @@ import {
   EmptyState,
   ErrorState,
   LoadingState,
-  Screen,
   SectionHeader,
 } from '@/components/ui';
+import { TabScreen } from '@/components/navigation';
 
 import { getCourses } from '@/repositories/courseRepository';
 import { getTopicsByCourse } from '@/repositories/topicRepository';
@@ -96,37 +96,37 @@ export default function LearnScreen() {
 
   if (loading) {
     return (
-      <Screen>
+      <TabScreen>
         <ScreenHeader />
         <LoadingState message="Loading your path..." />
-      </Screen>
+      </TabScreen>
     );
   }
 
   if (error) {
     return (
-      <Screen>
+      <TabScreen>
         <ScreenHeader />
         <ErrorState title="Couldn't load lessons" onRetry={load} />
-      </Screen>
+      </TabScreen>
     );
   }
 
   if (courses.length === 0) {
     return (
-      <Screen>
+      <TabScreen>
         <ScreenHeader />
         <EmptyState
           icon="book-outline"
           title="No courses yet"
           message="Courses will appear here soon."
         />
-      </Screen>
+      </TabScreen>
     );
   }
 
   return (
-    <Screen>
+    <TabScreen>
       <ScreenHeader />
 
       <View style={styles.list}>
@@ -220,7 +220,7 @@ export default function LearnScreen() {
           </View>
         ))}
       </View>
-    </Screen>
+    </TabScreen>
   );
 }
 

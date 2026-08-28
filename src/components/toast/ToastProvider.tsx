@@ -296,19 +296,19 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     success: {
-      backgroundColor: 'rgba(99, 230, 190, 0.18)',
+      backgroundColor: hexWithAlpha(colors.status.success, 0.2),
     },
 
     error: {
-      backgroundColor: 'rgba(255, 107, 107, 0.18)',
+      backgroundColor: hexWithAlpha(colors.status.error, 0.18),
     },
 
     info: {
-      backgroundColor: 'rgba(116, 192, 252, 0.18)',
+      backgroundColor: hexWithAlpha(colors.status.info, 0.18),
     },
 
     xp: {
-      backgroundColor: 'rgba(92, 225, 230, 0.18)',
+      backgroundColor: hexWithAlpha(colors.accent.secondary, 0.18),
     },
 
     message: {
@@ -316,3 +316,10 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.text.primary,
     },
   });
+
+function hexWithAlpha(hex: string, alpha: number): string {
+  const value = Math.round(alpha * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `${hex}${value}`;
+}
