@@ -62,6 +62,7 @@ export default function ChallengeScreen() {
   const styles = useThemedStyles(makeStyles);
 
   const [challenge, setChallenge] = useState<CodeChallenge | null>(null);
+  const [difficulty, setDifficulty] = useState<Challenge['difficulty']>('easy');
   const [loadError, setLoadError] = useState(false);
   const [engineStatus, setEngineStatus] = useState<
     'available' | 'unavailable' | 'initializing' | 'error'
@@ -97,6 +98,7 @@ export default function ChallengeScreen() {
           setLoadError(true);
           return;
         }
+        setDifficulty(c.difficulty);
         applyChallenge(toCodeChallenge(c));
       })
       .catch(() => setLoadError(true))
@@ -255,7 +257,16 @@ export default function ChallengeScreen() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.xs }]}>
         <IconButton name="arrow-back" onPress={() => router.back()} />
         <View style={styles.headerBadges}>
-          <Badge label="Easy" variant="warning" />
+          <Badge
+            label={difficulty.toUpperCase()}
+            variant={
+              difficulty === 'hard'
+                ? 'error'
+                : difficulty === 'medium'
+                ? 'warning'
+                : 'success'
+            }
+          />
           <EngineBadge status={engineStatus} />
         </View>
       </View>

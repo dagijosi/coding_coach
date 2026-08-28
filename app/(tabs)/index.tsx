@@ -207,7 +207,7 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <View style={{ gap: spacing.xs }}>
           <AppText variant="caption" muted>
-            {greeting()} 👋
+            {greeting()}
           </AppText>
           <AppText variant="h1">Coding Coach</AppText>
           <AppText variant="bodySmall" muted>

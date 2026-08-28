@@ -276,12 +276,11 @@ export default function PracticeScreen() {
 
 function Header() {
   return (
-    <View style={{ gap: spacing.sm }}>
-      <AppText variant="h1">Practice</AppText>
-      <AppText variant="bodySmall" muted>
-        Level up with hands-on coding problems.
-      </AppText>
-    </View>
+    <SectionHeader
+      title="Practice"
+      subtitle="Level up with hands-on coding problems."
+      icon="code-slash-outline"
+    />
   );
 }
 
