@@ -107,7 +107,10 @@ export default function ProblemScreen() {
       setSubmitted(true);
 
       if (isCorrect) {
-        showToast(`Correct! +${xp} XP`, 'xp');
+        showToast(
+          xp > 0 ? `Correct! +${xp} XP` : 'Correct!',
+          'xp'
+        );
       } else {
         showToast('Not quite — review the explanation below', 'info');
       }

@@ -264,7 +264,10 @@ export default function LessonScreen() {
   const handleFinish = async () => {
     try {
       const xp = await completeLesson(lesson.id);
-      showToast(`Lesson complete! +${xp} XP`, 'success');
+      showToast(
+        xp > 0 ? `Lesson complete! +${xp} XP` : 'Lesson complete!',
+        'success'
+      );
       setTimeout(() => router.back(), 650);
     } catch {
       showToast('Could not save your progress. Please try again.', 'error');
@@ -670,7 +673,10 @@ function ProblemStep({
 
       if (isCorrect) {
         setSubmitted(true);
-        showToast(`Correct! +${xp} XP`, 'xp');
+        showToast(
+          xp > 0 ? `Correct! +${xp} XP` : 'Correct!',
+          'xp'
+        );
         onSolved();
       } else {
         setWrongGuess(true);

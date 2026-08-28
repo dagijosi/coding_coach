@@ -24,6 +24,7 @@ import { getTopics } from '@/repositories/topicRepository';
 import { getChallenges } from '@/repositories/challengeRepository';
 import {
   getCompletedLessonsCount,
+  getContinueLearningLessonId,
   getLessonProgressById,
   getUserProgress,
 } from '@/repositories/progressRepository';
@@ -66,8 +67,9 @@ export default function HomeScreen() {
       const challenges = await getChallenges();
       const user = await getUserProgress();
       const completed = await getCompletedLessonsCount();
+      const resumeId = await getContinueLearningLessonId();
 
-      const first = lessons[0] ?? null;
+      const first = lessons.find((l) => l.id === resumeId) ?? null;
       setLesson(first);
       setTopicName(
         first
