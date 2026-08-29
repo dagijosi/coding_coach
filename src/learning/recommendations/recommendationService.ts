@@ -30,6 +30,7 @@ import type {
   RecommendationLesson,
   RecommendationProblem,
 } from './recommendationEngine';
+import { getWeakAreas } from '../weakareas/weakAreaService';
 
 export type {
   RecommendationContext,
@@ -62,6 +63,7 @@ async function loadRecommendationContext(
     solvedProblemIds,
     completedChallengeIds,
     resumeLessonId,
+    weakAreas,
   ] = await Promise.all([
     getTopics(),
     getTopicMastery(now),
@@ -72,6 +74,7 @@ async function loadRecommendationContext(
     getSolvedProblemIds(),
     getCompletedChallengeIds(),
     getContinueLearningLessonId(),
+    getWeakAreas(now),
   ]);
 
   const topicIdByLesson = new Map<string, string>(
@@ -128,6 +131,7 @@ async function loadRecommendationContext(
     completedChallengeIds: new Set(completedChallengeIds),
     resumeLessonId,
     daily,
+    weakAreas,
   };
 }
 

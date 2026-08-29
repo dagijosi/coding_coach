@@ -25,6 +25,7 @@ import type {
   RecommendationType,
 } from './recommendationTypes';
 import type { TopicMastery } from '../mastery/masteryTypes';
+import type { WeakArea } from '../weakareas/weakAreaTypes';
 import type { DailyChallengeState } from '@/repositories/progressRepository';
 import type { LessonStatus, Topic } from '@/types/learning';
 
@@ -78,6 +79,13 @@ export type RecommendationContext = {
   resumeLessonId: string | null;
   /** Today's daily challenge selection and its derived state, if any. */
   daily: { challengeId: string; state: DailyChallengeState } | null;
+  /**
+   * Weak areas from the Step 5 detector (weakAreaService.getWeakAreas()).
+   * Optional so the engine works standalone; when present, the practice_topic
+   * reason reflects the weak-area signal (e.g. a low success rate) instead of
+   * the generic mastery wording.
+   */
+  weakAreas?: readonly WeakArea[];
 };
 
 export type BuildRecommendationsOptions = {
@@ -272,6 +280,9 @@ export function buildRecommendations(
   const weakestTopic = practiceCandidates[0] ?? null;
 
   if (weakestTopic) {
+    const weakArea = context.weakAreas?.find(
+      (a) => a.kind === 'topic' && a.targetId === weakestTopic.topicId
+    );
     candidates.push(
       makeCandidate(
         'practice_topic',
@@ -279,7 +290,9 @@ export function buildRecommendations(
         {
           title: `Practice ${weakestTopic.topicName}`,
           description: 'Focused practice on your weakest started topic.',
-          reason: `Your mastery in "${weakestTopic.topicName}" is ${pct(weakestTopic.masteryScore)} — below the target level.`,
+          reason: weakArea
+            ? weakArea.reason
+            : `Your mastery in "${weakestTopic.topicName}" is ${pct(weakestTopic.masteryScore)} — below the target level.`,
           confidence: round2(
             0.5 + (WEAK_TOPIC_MASTERY_MAX - weakestTopic.masteryScore) / 100
           ),

@@ -63,7 +63,7 @@ export type TopicStrengths = {
 
 export type RecentActivityItem = {
   id: string;
-  kind: 'problem' | 'challenge';
+  kind: 'lesson' | 'problem' | 'challenge';
   title: string;
   success: boolean;
   attemptedAt: string;

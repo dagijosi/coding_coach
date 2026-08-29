@@ -1,28 +1,41 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router, useFocusEffect } from 'expo-router';
 
 import {
   AppText,
+  Badge,
+  Button,
   Card,
+  EmptyState,
   ErrorState,
   LoadingState,
-  SectionHeader,
   ProgressBar,
+  SectionHeader,
 } from '@/components/ui';
 import { TabScreen } from '@/components/navigation';
 
 import {
-  getChallengesCompleted,
-  getCompletedLessonsCount,
-  getProblemsStats,
-  getUserProgress,
-  getLevelProgress,
-  getStrongestTopics,
-  getWeakestTopics,
+  getLearningStats,
+  getOverallMastery,
+  getProgressionSummary,
+  getProgressSummary,
+  getRecentActivity,
+  getTopicMastery,
 } from '@/repositories/progressRepository';
+import type { LearningStats } from '@/repositories/progressRepository';
+import { getWeakAreas } from '@/learning/weakareas/weakAreaService';
+import type { WeakArea } from '@/learning/weakareas/weakAreaTypes';
+import { buildInsights } from '@/learning/insights';
+import type { DashboardInsight } from '@/learning/insights';
 import type { TopicMastery } from '@/learning/mastery/masteryTypes';
-import type { UserProgress } from '@/types/progress';
+import type { OverallMastery } from '@/learning/mastery/masteryTypes';
+import type {
+  ProgressionSummary,
+  ProgressSummary,
+  RecentActivityItem,
+} from '@/types/progress';
 
 import {
   radius,
@@ -43,14 +56,69 @@ function titleForLevel(level: number): string {
   return 'JavaScript Beginner';
 }
 
-type ProfileData = {
-  progress: UserProgress;
-  lessonsCompleted: number;
-  problemsSolved: number;
-  challengesCompleted: number;
-  weakTopics: TopicMastery[];
-  strongTopics: TopicMastery[];
+const RECENT_ACTIVITY_LIMIT = 8;
+
+type DashboardData = {
+  progression: ProgressionSummary;
+  progress: ProgressSummary;
+  stats: LearningStats;
+  overall: OverallMastery;
+  topicMastery: TopicMastery[];
+  weakAreas: WeakArea[];
+  recent: RecentActivityItem[];
+  insights: DashboardInsight[];
 };
+
+function hasLearningActivity(data: DashboardData): boolean {
+  return (
+    data.progress.completedLessons > 0 ||
+    data.progress.solvedProblems > 0 ||
+    data.progress.completedChallenges > 0 ||
+    data.progress.totalAttempts > 0 ||
+    data.overall.topicsStarted > 0 ||
+    data.progression.currentStreak > 0
+  );
+}
+
+function topicBadge(
+  topic: TopicMastery,
+  weakTopicIds: ReadonlySet<string>
+): { label: string; variant: 'success' | 'warning' | 'error' | 'default' } {
+  if (weakTopicIds.has(topic.topicId)) {
+    return { label: 'Needs practice', variant: 'error' };
+  }
+  if (topic.level === 'mastered' || topic.level === 'proficient') {
+    return { label: 'Strong', variant: 'success' };
+  }
+  if (topic.masteryScore > 0) {
+    return { label: 'In progress', variant: 'warning' };
+  }
+  return { label: 'Not started', variant: 'default' };
+}
+
+function topicCompletion(topic: TopicMastery): number {
+  return topic.lessonsTotal > 0 ? topic.lessonsCompleted / topic.lessonsTotal : 0;
+}
+
+function iconForActivity(kind: RecentActivityItem['kind']): keyof typeof Ionicons.glyphMap {
+  if (kind === 'lesson') return 'book-outline';
+  if (kind === 'challenge') return 'code-slash-outline';
+  return 'help-circle-outline';
+}
+
+function relativeActivityTime(attemptedAt: string): string {
+  const then = new Date(attemptedAt);
+  const startOfDay = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const days = Math.max(
+    0,
+    Math.round((startOfDay(new Date()) - startOfDay(then)) / 86400000)
+  );
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  return then.toLocaleDateString();
+}
 
 const APPEARANCE_OPTIONS: Array<{
   mode: ThemeMode;
@@ -62,49 +130,85 @@ const APPEARANCE_OPTIONS: Array<{
   { mode: 'system', label: 'System', icon: 'phone-portrait-outline' },
 ];
 
-export default function ProfileScreen() {
+export default function ProgressScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
-  const [data, setData] = useState<ProfileData | null>(null);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const progress = await getUserProgress();
-      const lessonsCompleted = await getCompletedLessonsCount();
-      const problems = await getProblemsStats();
-      const challengesCompleted = await getChallengesCompleted();
-      const [weakTopics, strongTopics] = await Promise.all([
-        getWeakestTopics(3),
-        getStrongestTopics(3),
+      const [
+        progression,
+        progress,
+        stats,
+        overall,
+        topicMastery,
+        weakAreas,
+        recent,
+      ] = await Promise.all([
+        getProgressionSummary(),
+        getProgressSummary(),
+        getLearningStats(),
+        getOverallMastery(),
+        getTopicMastery(),
+        getWeakAreas(),
+        getRecentActivity(RECENT_ACTIVITY_LIMIT),
       ]);
 
       setData({
+        progression,
         progress,
-        lessonsCompleted,
-        problemsSolved: problems.solved,
-        challengesCompleted,
-        weakTopics,
-        strongTopics,
+        stats,
+        overall,
+        topicMastery,
+        weakAreas,
+        recent,
+        insights: buildInsights({
+          progression: {
+            totalXP: progression.totalXP,
+            xpToNextLevel: progression.xpToNextLevel,
+            currentStreak: progression.currentStreak,
+          },
+          progress: {
+            totalLessons: progress.totalLessons,
+            completedLessons: progress.completedLessons,
+            problemsAttempted: stats.problemsAttempted,
+            problemAccuracy: stats.accuracy,
+          },
+          overall: {
+            score: overall.score,
+            topicsStarted: overall.topicsStarted,
+            strongestTopic: overall.strongestTopic
+              ? {
+                  topicName: overall.strongestTopic.topicName,
+                  masteryScore: overall.strongestTopic.masteryScore,
+                }
+              : null,
+          },
+          weakAreas,
+        }),
       });
       setError(false);
     } catch (e) {
-      console.error('Failed to load profile:', e);
+      console.error('Failed to load progress dashboard:', e);
       setError(true);
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load])
+  );
 
   if (error) {
     return (
       <TabScreen scroll={false}>
         <ErrorState
           full
-          title="Couldn't load your profile"
+          title="Couldn't load your dashboard"
           onRetry={load}
         />
       </TabScreen>
@@ -114,27 +218,25 @@ export default function ProfileScreen() {
   if (!data) {
     return (
       <TabScreen scroll={false}>
-        <LoadingState full message="Loading profile..." />
+        <LoadingState full message="Loading your progress..." />
       </TabScreen>
     );
   }
 
-const levelProgress = getLevelProgress(data.progress.xp);
-  const level = levelProgress.level;
-  const title = titleForLevel(level);
-  const xpIntoLevel = levelProgress.xpIntoLevel;
-  const requiredForLevel = levelProgress.xpRequiredForLevel;
-
-  const weakTopics = data.weakTopics;
-  const strongTopics = data.strongTopics;
+  const { progression, progress, overall, topicMastery, weakAreas, recent, insights } = data;
+  const active = hasLearningActivity(data);
+  const weakTopicIds = new Set(
+    weakAreas.filter((a) => a.kind === 'topic').map((a) => a.targetId)
+  );
+  const levelTitle = titleForLevel(progression.level);
 
   return (
     <TabScreen>
       {/* Identity */}
       <SectionHeader
-        title="Profile"
-        subtitle="Your learning progress and preferences."
-        icon="person-outline"
+        title="Progress"
+        subtitle="Your learning dashboard, stats and preferences."
+        icon="stats-chart"
       />
 
       <View style={styles.section}>
@@ -151,76 +253,275 @@ const levelProgress = getLevelProgress(data.progress.xp);
             </AppText>
             <AppText variant="h1">{LOCAL_PROFILE_NAME}</AppText>
             <AppText variant="bodySmall" style={styles.levelText}>
-              Level {level} · {title}
+              Level {progression.level} · {levelTitle}
             </AppText>
           </View>
         </Card>
 
         <Card>
           <View style={styles.levelRow}>
-            <AppText variant="h3">Level {level}</AppText>
+            <AppText variant="h3">Level {progression.level}</AppText>
             <AppText variant="caption" muted>
-              {xpIntoLevel} / {requiredForLevel} XP
+              {progression.levelProgress.xpIntoLevel} /{' '}
+              {progression.levelProgress.xpRequiredForLevel} XP
             </AppText>
           </View>
           <View style={styles.levelBar}>
-            <ProgressBar progress={levelProgress.percentage} />
+            <ProgressBar progress={progression.levelProgress.percentage} />
+          </View>
+          <AppText variant="caption" muted style={styles.levelHint}>
+            {progression.xpToNextLevel > 0
+              ? `${progression.xpToNextLevel} XP to Level ${progression.level + 1}`
+              : 'Top level reached'}
+          </AppText>
+
+          <View style={styles.streakRow}>
+            <MiniStat
+              icon="flame"
+              color={colors.status.warning}
+              value={`${progression.currentStreak}`}
+              label="Day streak"
+            />
+            <MiniStat
+              icon="trophy"
+              color={colors.status.info}
+              value={`${progression.longestStreak}`}
+              label="Longest"
+            />
+            <MiniStat
+              icon={
+                progression.hasActivityToday
+                  ? 'checkmark-circle'
+                  : 'ellipse-outline'
+              }
+              color={
+                progression.hasActivityToday
+                  ? colors.status.success
+                  : colors.text.muted
+              }
+              value={progression.hasActivityToday ? 'Yes' : 'No'}
+              label="Studied today"
+            />
           </View>
         </Card>
       </View>
 
-      {/* Statistics */}
-      <View style={styles.section}>
-        <SectionHeader title="Statistics" icon="stats-chart" />
-
-        <View style={styles.grid}>
-          <StatTile
-            icon="grid-outline"
-            color={colors.accent.primary}
-            value={data.problemsSolved}
-            label="Problems solved"
-          />
-          <StatTile
-            icon="code-slash"
-            color={colors.accent.secondary}
-            value={data.challengesCompleted}
-            label="Challenges done"
-          />
-          <StatTile
-            icon="book"
-            color={colors.status.info}
-            value={data.lessonsCompleted}
-            label="Lessons done"
-          />
-          <StatTile
-            icon="flash"
-            color={colors.status.warning}
-            value={data.progress.xp}
-            label="Total XP"
-          />
+      {!active ? (
+        <View style={styles.section}>
+          <Card>
+            <EmptyState
+              icon="sparkles-outline"
+              title="Start your first lesson"
+              message="Complete a lesson, solve a problem or take on a challenge — your progress, streaks and insights will appear here."
+            />
+            <Button
+              title="Start learning"
+              onPress={() => router.push('/learn')}
+            />
+          </Card>
         </View>
-      </View>
+      ) : (
+        <>
+          {/* Overview */}
+          <View style={styles.section}>
+            <SectionHeader title="Overview" icon="analytics-outline" />
 
-      {/* Learning */}
-      <View style={styles.section}>
-        <SectionHeader title="Learning" icon="school-outline" />
+            <View style={styles.grid}>
+              <StatTile
+                icon="book"
+                color={colors.status.info}
+                value={`${progress.completedLessons}/${progress.totalLessons}`}
+                label="Lessons done"
+              />
+              <StatTile
+                icon="grid-outline"
+                color={colors.accent.primary}
+                value={progress.solvedProblems}
+                label="Problems solved"
+              />
+              <StatTile
+                icon="code-slash"
+                color={colors.accent.secondary}
+                value={progress.completedChallenges}
+                label="Challenges done"
+              />
+              <StatTile
+                icon="checkmark-circle"
+                color={colors.status.success}
+                value={`${Math.round(progress.successRate)}%`}
+                label="Success rate"
+              />
+            </View>
+          </View>
 
-        <TopicList
-          icon="trending-up"
-          title="Weak topics"
-          color={colors.status.error}
-          topics={weakTopics}
-          emptyText="No topics attempted yet."
-        />
+          {/* Mastery */}
+          <View style={styles.section}>
+            <SectionHeader title="Mastery" icon="speedometer-outline" />
+            <Card>
+              <View style={styles.masteryHeader}>
+                <AppText variant="body">Overall mastery</AppText>
+                <AppText variant="body" style={{ color: colors.accent.primary }}>
+                  {overall.score}%
+                </AppText>
+              </View>
+              <View style={styles.masteryBar}>
+                <ProgressBar progress={overall.score / 100} />
+              </View>
+              {overall.strongestTopic ? (
+                <View style={styles.masteryRow}>
+                  <Ionicons
+                    name="trending-up"
+                    size={16}
+                    color={colors.status.success}
+                  />
+                  <AppText variant="bodySmall" style={styles.flex} numberOfLines={1}>
+                    {overall.strongestTopic.topicName}
+                  </AppText>
+                  <AppText variant="bodySmall" style={{ color: colors.status.success }}>
+                    {overall.strongestTopic.masteryScore}%
+                  </AppText>
+                </View>
+              ) : null}
+              {overall.weakestTopic ? (
+                <View style={styles.masteryRow}>
+                  <Ionicons
+                    name="trending-down"
+                    size={16}
+                    color={colors.status.error}
+                  />
+                  <AppText variant="bodySmall" style={styles.flex} numberOfLines={1}>
+                    {overall.weakestTopic.topicName}
+                  </AppText>
+                  <AppText variant="bodySmall" style={{ color: colors.status.error }}>
+                    {overall.weakestTopic.masteryScore}%
+                  </AppText>
+                </View>
+              ) : null}
+            </Card>
+          </View>
 
-        <TopicList
-          icon="trending-up"
-          title="Strong topics"
-          color={colors.status.success}
-          topics={strongTopics}
-          emptyText="No strong topics yet — keep learning!"
-        />
-      </View>
+          {/* Topic progress */}
+          <View style={styles.section}>
+            <SectionHeader
+              title="Topic progress"
+              subtitle="Mastery and completion per topic."
+              icon="layers-outline"
+            />
+            <Card>
+              {topicMastery.length === 0 ? (
+                <AppText variant="bodySmall" muted>
+                  No topics found.
+                </AppText>
+              ) : (
+                <View style={styles.topicList}>
+                  {topicMastery.map((topic) => {
+                    const badge = topicBadge(topic, weakTopicIds);
+                    return (
+                      <View key={topic.topicId} style={styles.topicRow}>
+                        <View style={styles.topicNameRow}>
+                          <AppText variant="bodySmall" style={styles.flex} numberOfLines={2}>
+                            {topic.topicName}
+                          </AppText>
+                          <AppText variant="bodySmall">
+                            {topic.masteryScore}%
+                          </AppText>
+                        </View>
+                        <View style={styles.topicBar}>
+                          <ProgressBar progress={topicCompletion(topic)} />
+                        </View>
+                        <View style={styles.topicMetaRow}>
+                          <AppText variant="caption" muted>
+                            {topic.lessonsCompleted}/{topic.lessonsTotal} lessons
+                          </AppText>
+                          <Badge label={badge.label} variant={badge.variant} />
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </Card>
+          </View>
+
+          {/* Insights */}
+          {insights.length > 0 ? (
+            <View style={styles.section}>
+              <SectionHeader
+                title="Insights"
+                subtitle="What the data says about your learning."
+                icon="bulb-outline"
+              />
+              <Card>
+                <View style={styles.insightList}>
+                  {insights.map((insight) => (
+                    <View key={insight.id} style={styles.insightRow}>
+                      <Ionicons
+                        name="sparkles"
+                        size={15}
+                        color={colors.accent.secondary}
+                      />
+                      <AppText variant="bodySmall" style={styles.flex}>
+                        {insight.text}
+                      </AppText>
+                    </View>
+                  ))}
+                </View>
+              </Card>
+            </View>
+          ) : null}
+
+          {/* Recent activity */}
+          <View style={styles.section}>
+            <SectionHeader
+              title="Recent activity"
+              subtitle="Your latest completed lessons and attempts."
+              icon="time-outline"
+            />
+            <Card>
+              {recent.length === 0 ? (
+                <AppText variant="bodySmall" muted>
+                  Nothing yet — your latest activity will appear here.
+                </AppText>
+              ) : (
+                <View style={styles.activityList}>
+                  {recent.map((item) => (
+                    <View key={item.id} style={styles.activityRow}>
+                      <Ionicons
+                        name={iconForActivity(item.kind)}
+                        size={19}
+                        color={
+                          item.success
+                            ? colors.status.success
+                            : colors.text.muted
+                        }
+                      />
+                      <View style={styles.flex}>
+                        <AppText variant="bodySmall" numberOfLines={1}>
+                          {item.title}
+                        </AppText>
+                        <AppText variant="caption" muted>
+                          {relativeActivityTime(item.attemptedAt)}
+                        </AppText>
+                      </View>
+                      <Ionicons
+                        name={
+                          item.success ? 'checkmark-circle' : 'close-circle'
+                        }
+                        size={18}
+                        color={
+                          item.success
+                            ? colors.status.success
+                            : colors.text.muted
+                        }
+                      />
+                    </View>
+                  ))}
+                </View>
+              )}
+            </Card>
+          </View>
+        </>
+      )}
 
       {/* Settings */}
       <View style={styles.section}>
@@ -239,7 +540,7 @@ function StatTile({
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
-  value: number;
+  value: string | number;
   label: string;
 }) {
   const styles = useThemedStyles(makeStyles);
@@ -254,48 +555,26 @@ function StatTile({
   );
 }
 
-function TopicList({
+function MiniStat({
   icon,
-  title,
   color,
-  topics,
-  emptyText,
+  value,
+  label,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
-  title: string;
   color: string;
-  topics: TopicMastery[];
-  emptyText: string;
+  value: string | number;
+  label: string;
 }) {
-  const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
-
   return (
-    <Card>
-      <View style={styles.topicHeader}>
-        <Ionicons name={icon} size={18} color={color} />
-        <AppText variant="h3">{title}</AppText>
-      </View>
-
-      {topics.length === 0 ? (
-        <AppText variant="bodySmall" muted>
-          {emptyText}
-        </AppText>
-      ) : (
-        <View style={styles.topicList}>
-          {topics.map((topic) => (
-            <View key={topic.topicId} style={styles.topicRow}>
-              <AppText variant="bodySmall" style={styles.flex}>
-                {topic.topicName}
-              </AppText>
-              <AppText variant="bodySmall" style={{ color }}>
-                {topic.masteryScore}%
-              </AppText>
-            </View>
-          ))}
-        </View>
-      )}
-    </Card>
+    <View style={styles.miniStat}>
+      <Ionicons name={icon} size={18} color={color} />
+      <AppText variant="h3">{value}</AppText>
+      <AppText variant="caption" muted>
+        {label}
+      </AppText>
+    </View>
   );
 }
 
@@ -393,6 +672,25 @@ const makeStyles = (colors: ThemeColors) =>
       marginTop: spacing.md,
     },
 
+    levelHint: {
+      marginTop: spacing.sm,
+    },
+
+    streakRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      marginTop: spacing.lg,
+      paddingTop: spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: colors.border.default,
+    },
+
+    miniStat: {
+      flex: 1,
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+
     grid: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -405,6 +703,24 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing.xs,
     },
 
+    masteryHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+
+    masteryBar: {
+      marginTop: spacing.sm,
+      marginBottom: spacing.md,
+    },
+
+    masteryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginTop: spacing.sm,
+    },
+
     topicHeader: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -413,18 +729,52 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     topicList: {
-      gap: spacing.sm,
+      gap: spacing.md,
     },
 
     topicRow: {
+      gap: spacing.xs,
+    },
+
+    topicNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+
+    topicBar: {
+      marginTop: spacing.xs,
+    },
+
+    topicMetaRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      marginTop: spacing.xs,
+    },
+
+    insightList: {
+      gap: spacing.md,
+    },
+
+    insightRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.sm,
+    },
+
+    activityList: {
+      gap: spacing.md,
+    },
+
+    activityRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
     },
 
     flex: {
       flex: 1,
-      gap: spacing.xs,
     },
 
     settingList: {

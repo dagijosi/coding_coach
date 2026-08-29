@@ -23,8 +23,6 @@ import {
   buildConceptMastery,
   buildTopicMastery,
   computeOverallMastery,
-  sortStrongest,
-  sortWeakest,
 } from '@/learning/mastery/mastery';
 import {
   getLevelFromXP,
@@ -75,8 +73,6 @@ export {
   computeMasteryScore,
   computeOverallMastery,
   masteryLevelForScore,
-  sortStrongest,
-  sortWeakest,
   weightedAccuracy,
 } from '@/learning/mastery/mastery';
 
@@ -302,6 +298,66 @@ export async function getAttemptedProblemIds(): Promise<string[]> {
   return rows.map((row) => row.problem_id);
 }
 
+export type ProblemPracticeRecord = {
+  problemId: string;
+  title: string;
+  lessonId: string;
+  order: number;
+  solved: boolean;
+  failed: boolean;
+  attempted: boolean;
+};
+
+/**
+ * Lean per-problem practice flags for targeted practice (Phase 6 Step 5).
+ * Loads only ids, titles and attempt-derived booleans — never hints or heavy
+ * content — so building a practice queue stays cheap even on large content.
+ *
+ *  - solved:    at least one correct attempt
+ *  - failed:    at least one incorrect attempt
+ *  - attempted: any attempt
+ * A "previously failed, still unsolved" problem (failed && !solved) is the
+ * strongest targeted-practice candidate.
+ */
+export async function getProblemPracticeData(): Promise<ProblemPracticeRecord[]> {
+  const db = await getDatabase();
+
+  const rows = await db.getAllAsync<{
+    problem_id: string;
+    lesson_id: string;
+    title: string;
+    order: number;
+    solved: number;
+    failed: number;
+    attempted: number;
+  }>(
+    `
+      SELECT
+        p.id AS problem_id,
+        p.lesson_id AS lesson_id,
+        p.title AS title,
+        p."order" AS "order",
+        MAX(CASE WHEN pa.correct = 1 THEN 1 ELSE 0 END) AS solved,
+        MAX(CASE WHEN pa.correct = 0 THEN 1 ELSE 0 END) AS failed,
+        MAX(CASE WHEN pa.id IS NOT NULL THEN 1 ELSE 0 END) AS attempted
+      FROM problems p
+      LEFT JOIN problem_attempts pa ON pa.problem_id = p.id
+      GROUP BY p.id
+      ORDER BY p."order" ASC
+    `
+  );
+
+  return rows.map((row) => ({
+    problemId: row.problem_id,
+    title: row.title,
+    lessonId: row.lesson_id,
+    order: row.order,
+    solved: row.solved === 1,
+    failed: row.failed === 1,
+    attempted: row.attempted === 1,
+  }));
+}
+
 export async function getAccuracy(): Promise<number> {
   const db = await getDatabase();
 
@@ -487,6 +543,56 @@ export async function getAttemptedChallengeIds(): Promise<string[]> {
   );
 
   return rows.map((row) => row.challenge_id);
+}
+
+export type ChallengePracticeRecord = {
+  challengeId: string;
+  title: string;
+  lessonId: string;
+  order: number;
+  passed: boolean;
+  attempted: boolean;
+};
+
+/**
+ * Lean per-challenge practice flags for targeted practice (Phase 6 Step 5).
+ * Only unpassed challenges are targetable; they are suggested once their
+ * lesson is completed.
+ */
+export async function getChallengePracticeData(): Promise<ChallengePracticeRecord[]> {
+  const db = await getDatabase();
+
+  const rows = await db.getAllAsync<{
+    challenge_id: string;
+    lesson_id: string;
+    title: string;
+    order: number;
+    passed: number;
+    attempted: number;
+  }>(
+    `
+      SELECT
+        c.id AS challenge_id,
+        c.lesson_id AS lesson_id,
+        c.title AS title,
+        c."order" AS "order",
+        MAX(CASE WHEN ca.passed = 1 THEN 1 ELSE 0 END) AS passed,
+        MAX(CASE WHEN ca.id IS NOT NULL THEN 1 ELSE 0 END) AS attempted
+      FROM challenges c
+      LEFT JOIN challenge_attempts ca ON ca.challenge_id = c.id
+      GROUP BY c.id
+      ORDER BY c."order" ASC
+    `
+  );
+
+  return rows.map((row) => ({
+    challengeId: row.challenge_id,
+    title: row.title,
+    lessonId: row.lesson_id,
+    order: row.order,
+    passed: row.passed === 1,
+    attempted: row.attempted === 1,
+  }));
 }
 
 export type RecentChallengeAttempt = {
@@ -979,43 +1085,6 @@ export async function getTopicMastery(
 }
 
 /**
- * The strongest `limit` topics by mastery score (started topics only). Scores
- * tie-break on topic name, then id — deterministic.
- */
-export async function getStrongestTopics(
-  limit = 3,
-  now = new Date()
-): Promise<TopicMastery[]> {
-  const started = (await getTopicMastery(now)).filter(
-    (t) => t.masteryScore > 0
-  );
-  return sortStrongest(started).slice(0, limit);
-}
-
-/**
- * The weakest `limit` started topics by mastery score. Ties break on topic
- * name, then id — deterministic.
- */
-export async function getWeakestTopics(
-  limit = 3,
-  now = new Date()
-): Promise<TopicMastery[]> {
-  const started = (await getTopicMastery(now)).filter(
-    (t) => t.masteryScore > 0
-  );
-  return sortWeakest(started).slice(0, limit);
-}
-
-/** Topics with no learning evidence at all (mastery 0), in content order. */
-export async function getUnpracticedTopics(
-  now = new Date()
-): Promise<TopicMastery[]> {
-  return (await getTopicMastery(now)).filter(
-    (t) => t.masteryScore === 0
-  );
-}
-
-/**
  * Overall mastery across topics. Averaged over started topics only so that
  * unpracticed content does not drag the figure toward zero.
  */
@@ -1397,25 +1466,6 @@ export async function getProgressSummary(): Promise<ProgressSummary> {
 }
 
 /**
- * Overall success rate as a percentage. Zero when there have been no attempts.
- */
-export async function getOverallSuccessRate(): Promise<number> {
-  const db = await getDatabase();
-
-  const row = await db.getFirstAsync<{ total: number; successful: number }>(
-    `
-      SELECT
-        (SELECT COUNT(*) FROM problem_attempts)
-          + (SELECT COUNT(*) FROM challenge_attempts) AS total,
-        (SELECT COUNT(*) FROM problem_attempts WHERE correct = 1)
-          + (SELECT COUNT(*) FROM challenge_attempts WHERE passed = 1) AS successful
-    `
-  );
-
-  return failureSafeRate(row?.successful ?? 0, row?.total ?? 0);
-}
-
-/**
  * Per-topic progress, ordered by topic order then name.
  *
  * Success rate is problem-attempt based, matching the existing topic mastery
@@ -1589,13 +1639,26 @@ export async function getLessonProgress(): Promise<LessonProgressSummary[]> {
 }
 
 /**
- * Recent learning activity, newest first, combining problem and challenge
- * attempts with their titles. Empty when there has been no activity.
+ * Recent learning activity, newest first, combining lesson completions with
+ * problem and challenge attempts (with titles). Empty when there has been no
+ * activity.
  */
 export async function getRecentActivity(
   limit = 10
 ): Promise<RecentActivityItem[]> {
   const db = await getDatabase();
+
+  const lessonRows = db.getAllAsync<{
+    completed_at: string;
+    title: string;
+  }>(
+    `
+      SELECT lp.completed_at, l.title AS title
+      FROM lesson_progress lp
+      JOIN lessons l ON l.id = lp.lesson_id
+      WHERE lp.status = 'completed' AND lp.completed_at IS NOT NULL
+    `
+  );
 
   const problemRows = db.getAllAsync<{
     attempted_at: string;
@@ -1621,12 +1684,20 @@ export async function getRecentActivity(
     `
   );
 
-  const [problems, challenges] = await Promise.all([
+  const [lessons, problems, challenges] = await Promise.all([
+    lessonRows,
     problemRows,
     challengeRows,
   ]);
 
   const items: RecentActivityItem[] = [
+    ...lessons.map((row) => ({
+      id: `lesson-${row.completed_at}`,
+      kind: 'lesson' as const,
+      title: row.title,
+      success: true,
+      attemptedAt: row.completed_at,
+    })),
     ...problems.map((row) => ({
       id: `problem-${row.attempted_at}`,
       kind: 'problem' as const,
