@@ -1,26 +1,57 @@
 import { getDatabase } from '@/database';
+import { pickDailyItem } from '@/utils/dailyChallenge';
 import type {
   LessonProgress,
   LessonStatus,
 } from '@/types/learning';
 import type {
+  LessonProgressSummary,
+  ProgressSummary,
+  ProgressionSummary,
+  RecentActivityItem,
   TopicMastery,
+  TopicProgress,
+  TopicStrengths,
   UserProgress,
 } from '@/types/progress';
+import {
+  getLevelFromXP,
+  getLevelProgress,
+  getXPToNextLevel,
+} from '@/learning/progression/level';
+import {
+  computeStreaks,
+  dateKey,
+} from '@/learning/progression/streak';
+import {
+  LEARNING_XP,
+  XP_RULES,
+} from '@/learning/progression/xp';
+
+export { LEARNING_XP, XP_RULES } from '@/learning/progression/xp';
+export type { XPEvent, XPEventType } from '@/learning/progression/xp';
+export {
+  getLevelFromXP,
+  getLevelProgress,
+  getLevelProgress as getLevelInfo,
+  getXPForLevel,
+  getXPIntoLevel,
+  getXPToNextLevel,
+  type LevelProgress,
+} from '@/learning/progression/level';
+export {
+  computeStreaks,
+  dateKey,
+  type StreakResult,
+} from '@/learning/progression/streak';
 
 // ---------------------------------------------------------------------------
 // XP
 //
-// Single source of truth for how much XP each action is worth. All XP that a
-// learner earns flows through the award path in this module; screens never
-// compute XP themselves.
+// The XP economy is defined centrally in src/learning/progression/xp.ts and
+// re-exported here for backward compatibility. All XP a learner earns flows
+// through the award path in this module; screens never compute XP themselves.
 // ---------------------------------------------------------------------------
-
-export const LEARNING_XP = {
-  lessonComplete: 50,
-  problemSolved: 10,
-  challengeComplete: 25,
-} as const;
 
 // ---------------------------------------------------------------------------
 // Low-level helpers (private)
@@ -273,7 +304,7 @@ export async function recordChallengeAttempt({
 }): Promise<number> {
   const db = await getDatabase();
 
-  await db.runAsync(
+  const inserted = await db.runAsync(
     `
       INSERT INTO challenge_attempts (
         challenge_id,
@@ -290,6 +321,8 @@ export async function recordChallengeAttempt({
     passed ? 1 : 0,
     new Date().toISOString()
   );
+
+  const attemptId = inserted.lastInsertRowId;
 
   // A failed attempt earns no XP.
   if (!passed) {
@@ -310,9 +343,74 @@ export async function recordChallengeAttempt({
     return 0;
   }
 
-  await awardXp(db, LEARNING_XP.challengeComplete);
+  let awarded = LEARNING_XP.challengeComplete;
+  await awardXp(db, awarded);
   await touchActivity(db);
-  return LEARNING_XP.challengeComplete;
+
+  // If this is today's daily challenge, award the daily bonus on top (once per
+  // day, guarded inside awardDailyChallengeXp).
+  if (await isTodaysDailyChallenge(challengeId)) {
+    awarded += await awardDailyChallengeXp(db, challengeId, attemptId);
+  }
+
+  return awarded;
+}
+
+/**
+ * True when `challengeId` is the challenge selected for the current local day.
+ * Uses the same `pickDailyItem` selection as the dashboard, kept consistent
+ * with the ordered challenge list (ORDER BY "order").
+ */
+async function isTodaysDailyChallenge(challengeId: string): Promise<boolean> {
+  const db = await getDatabase();
+
+  const rows = await db.getAllAsync<{ id: string }>(
+    `SELECT id FROM challenges ORDER BY "order" ASC`
+  );
+
+  if (rows.length === 0) {
+    return false;
+  }
+
+  const dailyId = pickDailyItem(rows.map((r) => r.id), new Date());
+  return dailyId === challengeId;
+}
+
+/**
+ * Awards the daily-challenge completion XP exactly once per qualifying
+ * completion. Takes the database handle to stay on the same transaction-less
+ * store as the rest of the award path.
+ *
+ * A challenge earns the daily bonus only when it has not already been
+ * completed on the current local day before this attempt (`attemptId` is
+ * excluded from the count so the just-inserted row never matches). Re-passing
+ * the same challenge on the same day awards nothing.
+ */
+async function awardDailyChallengeXp(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  challengeId: string,
+  attemptId: number
+): Promise<number> {
+  const prior = await db.getFirstAsync<{ completed_today: number }>(
+    `
+      SELECT COUNT(*) AS completed_today
+      FROM challenge_attempts
+      WHERE challenge_id = ? AND passed = 1
+        AND date(attempted_at, 'localtime') = date(?, 'localtime')
+        AND id != ?
+    `,
+    challengeId,
+    new Date().toISOString(),
+    attemptId
+  );
+
+  if ((prior?.completed_today ?? 0) > 0) {
+    return 0;
+  }
+
+  await awardXp(db, XP_RULES.daily_challenge_completed);
+  await touchActivity(db);
+  return XP_RULES.daily_challenge_completed;
 }
 
 export async function getChallengesCompleted(): Promise<number> {
@@ -827,5 +925,469 @@ export async function getLearningStats(): Promise<LearningStats> {
     challengesCompleted: challenges?.completed ?? 0,
     challengesAttempted: challenges?.attempted ?? 0,
     accuracy: totalAtt === 0 ? 0 : (accuracyRow?.correct ?? 0) / totalAtt,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Progress aggregation (Phase 6 Step 1)
+//
+// Central layer that answers the headline progress questions: how much has the
+// learner completed, how many attempts were made/successful, what topics and
+// lessons have been worked on, and overall success rate. Everything is derived
+// deterministically from the SQLite tables, is safe on an empty database, and
+// is never computed from UI state.
+// ---------------------------------------------------------------------------
+
+function failureSafeRate(numerator: number, denominator: number): number {
+  return denominator === 0 ? 0 : (numerator / denominator) * 100;
+}
+
+/**
+ * High-level, single-number summary of the learner's progress across the whole
+ * path. Includes overall success rate and XP/streak on top of the raw counts.
+ */
+export async function getProgressSummary(): Promise<ProgressSummary> {
+  const db = await getDatabase();
+
+  const [
+    content,
+    eles,
+    solvedProblems,
+    completedChallenges,
+    attempts,
+    user,
+  ] = await Promise.all([
+    db.getFirstAsync<{ lessons: number; problems: number; challenges: number }>(
+      `
+        SELECT
+          (SELECT COUNT(*) FROM lessons) AS lessons,
+          (SELECT COUNT(*) FROM problems) AS problems,
+          (SELECT COUNT(*) FROM challenges) AS challenges
+      `
+    ),
+    db.getFirstAsync<{
+      completed: number;
+      in_progress: number;
+    }>(
+      `
+        SELECT
+          COUNT(CASE WHEN status = 'completed' THEN 1 END) AS completed,
+          COUNT(CASE WHEN status = 'in-progress' THEN 1 END) AS in_progress
+        FROM lesson_progress
+      `
+    ),
+    db.getFirstAsync<{ count: number }>(
+      `
+        SELECT COUNT(DISTINCT problem_id) AS count
+        FROM problem_attempts
+        WHERE correct = 1
+      `
+    ),
+    db.getFirstAsync<{ count: number }>(
+      `
+        SELECT COUNT(DISTINCT challenge_id) AS count
+        FROM challenge_attempts
+        WHERE passed = 1
+      `
+    ),
+    db.getFirstAsync<{ total: number; successful: number }>(
+      `
+        SELECT
+          (SELECT COUNT(*) FROM problem_attempts)
+            + (SELECT COUNT(*) FROM challenge_attempts) AS total,
+          (SELECT COUNT(*) FROM problem_attempts WHERE correct = 1)
+            + (SELECT COUNT(*) FROM challenge_attempts WHERE passed = 1) AS successful
+      `
+    ),
+    db.getFirstAsync<{ xp: number; current_streak: number; longest_streak: number }>(
+      `
+        SELECT xp, current_streak, longest_streak
+        FROM user_progress
+        WHERE id = 1
+      `
+    ),
+  ]);
+
+  const totalAttempts = attempts?.total ?? 0;
+  const successfulAttempts = attempts?.successful ?? 0;
+
+  return {
+    totalLessons: content?.lessons ?? 0,
+    completedLessons: eles?.completed ?? 0,
+    inProgressLessons: eles?.in_progress ?? 0,
+    totalProblems: content?.problems ?? 0,
+    solvedProblems: solvedProblems?.count ?? 0,
+    totalChallenges: content?.challenges ?? 0,
+    completedChallenges: completedChallenges?.count ?? 0,
+    totalAttempts,
+    successfulAttempts,
+    successRate: failureSafeRate(successfulAttempts, totalAttempts),
+    totalXP: user?.xp ?? 0,
+    currentStreak: user?.current_streak ?? 0,
+    longestStreak: user?.longest_streak ?? 0,
+  };
+}
+
+/**
+ * Overall success rate as a percentage. Zero when there have been no attempts.
+ */
+export async function getOverallSuccessRate(): Promise<number> {
+  const db = await getDatabase();
+
+  const row = await db.getFirstAsync<{ total: number; successful: number }>(
+    `
+      SELECT
+        (SELECT COUNT(*) FROM problem_attempts)
+          + (SELECT COUNT(*) FROM challenge_attempts) AS total,
+        (SELECT COUNT(*) FROM problem_attempts WHERE correct = 1)
+          + (SELECT COUNT(*) FROM challenge_attempts WHERE passed = 1) AS successful
+    `
+  );
+
+  return failureSafeRate(row?.successful ?? 0, row?.total ?? 0);
+}
+
+/**
+ * Per-topic progress, ordered by topic order then name.
+ *
+ * Success rate is problem-attempt based, matching the existing topic mastery
+ * used across the app, so strengths/weaknesses stay consistent everywhere.
+ */
+export async function getTopicProgress(): Promise<TopicProgress[]> {
+  const db = await getDatabase();
+
+  const rows = await db.getAllAsync<{
+    topic_id: string;
+    topic_name: string;
+    total_lessons: number;
+    completed_lessons: number;
+    total_problems: number;
+    solved_problems: number;
+    total_attempts: number;
+    successful_attempts: number;
+  }>(
+    `
+      SELECT
+        t.id AS topic_id,
+        t.name AS topic_name,
+        COUNT(DISTINCT l.id) AS total_lessons,
+        COUNT(DISTINCT CASE WHEN lp.status = 'completed' THEN l.id END) AS completed_lessons,
+        COUNT(DISTINCT p.id) AS total_problems,
+        COUNT(DISTINCT CASE WHEN pa.correct = 1 THEN p.id END) AS solved_problems,
+        COUNT(pa.id) AS total_attempts,
+        COUNT(CASE WHEN pa.correct = 1 THEN 1 END) AS successful_attempts
+      FROM topics t
+      LEFT JOIN lessons l ON l.topic_id = t.id
+      LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id
+      LEFT JOIN problems p ON p.lesson_id = l.id
+      LEFT JOIN problem_attempts pa ON pa.problem_id = p.id
+      GROUP BY t.id, t.name
+      ORDER BY t."order" ASC, t.name ASC
+    `
+  );
+
+  return rows.map((row) => {
+    const totalAttempts = row.total_attempts;
+    const successfulAttempts = row.successful_attempts;
+    return {
+      topicId: row.topic_id,
+      topicName: row.topic_name,
+      totalLessons: row.total_lessons,
+      completedLessons: row.completed_lessons,
+      totalProblems: row.total_problems,
+      solvedProblems: row.solved_problems,
+      totalAttempts,
+      successfulAttempts,
+      successRate: failureSafeRate(successfulAttempts, totalAttempts),
+      completionPercentage: failureSafeRate(
+        row.completed_lessons,
+        row.total_lessons
+      ),
+    };
+  });
+}
+
+/**
+ * The weakest and strongest topics by problem-attempt success rate, considering
+ * only topics that have been attempted. Both are null when nothing has been
+ * attempted. Returns deterministic results (weakest = lowest success rate).
+ */
+export async function getTopicStrengths(): Promise<TopicStrengths> {
+  const topics = (await getTopicProgress()).filter(
+    (t) => t.totalAttempts > 0
+  );
+
+  if (topics.length === 0) {
+    return { weakest: null, strongest: null };
+  }
+
+  const sorted = [...topics].sort(
+    (a, b) => a.successRate - b.successRate
+  );
+
+  return {
+    weakest: sorted[0],
+    strongest: sorted[sorted.length - 1],
+  };
+}
+
+/**
+ * Aggregated summary for a single lesson: status, completion time, and the
+ * attempt/success counts for its problems and challenges.
+ */
+export async function getLessonProgressSummary(
+  lessonId: string
+): Promise<LessonProgressSummary | null> {
+  const db = await getDatabase();
+
+  const row = await db.getFirstAsync<{
+    lesson_id: string;
+    title: string;
+    status: string;
+    completed_at: string | null;
+    problems_attempted: number;
+    problems_solved: number;
+    challenges_attempted: number;
+    challenges_solved: number;
+  }>(
+    `
+      SELECT
+        l.id AS lesson_id,
+        l.title AS title,
+        lp.status AS status,
+        lp.completed_at AS completed_at,
+        COUNT(DISTINCT pa.id) AS problems_attempted,
+        COUNT(DISTINCT CASE WHEN pa.correct = 1 THEN pa.id END) AS problems_solved,
+        COUNT(DISTINCT ca.id) AS challenges_attempted,
+        COUNT(DISTINCT CASE WHEN ca.passed = 1 THEN ca.id END) AS challenges_solved
+      FROM lessons l
+      LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id
+      LEFT JOIN problems p ON p.lesson_id = l.id
+      LEFT JOIN problem_attempts pa ON pa.problem_id = p.id
+      LEFT JOIN challenges c ON c.lesson_id = l.id
+      LEFT JOIN challenge_attempts ca ON ca.challenge_id = c.id
+      WHERE l.id = ?
+      GROUP BY l.id
+    `,
+    lessonId
+  );
+
+  if (!row) {
+    return null;
+  }
+
+  const attempted = row.problems_attempted + row.challenges_attempted;
+  const successful = row.problems_solved + row.challenges_solved;
+
+  return {
+    lessonId: row.lesson_id,
+    lessonName: row.title,
+    status: (row.status ?? 'not-started') as LessonStatus,
+    completedAt: row.completed_at,
+    problemsAttempted: row.problems_attempted,
+    problemsSolved: row.problems_solved,
+    challengesAttempted: row.challenges_attempted,
+    challengesSolved: row.challenges_solved,
+    successRate: failureSafeRate(successful, attempted),
+  };
+}
+
+/**
+ * Aggregated summaries for every lesson in the content hierarchy, in
+ * course -> topic -> lesson order.
+ */
+export async function getLessonProgress(): Promise<LessonProgressSummary[]> {
+  const db = await getDatabase();
+
+  const rows = await db.getAllAsync<{ lesson_id: string }>(
+    `
+      SELECT l.id AS lesson_id
+      FROM lessons l
+      LEFT JOIN topics t ON t.id = l.topic_id
+      LEFT JOIN courses c ON c.id = t.course_id
+      ORDER BY c."order" ASC, t."order" ASC, l."order" ASC
+    `
+  );
+
+  const summaries: LessonProgressSummary[] = [];
+  for (const row of rows) {
+    const summary = await getLessonProgressSummary(row.lesson_id);
+    if (summary) {
+      summaries.push(summary);
+    }
+  }
+
+  return summaries;
+}
+
+/**
+ * Recent learning activity, newest first, combining problem and challenge
+ * attempts with their titles. Empty when there has been no activity.
+ */
+export async function getRecentActivity(
+  limit = 10
+): Promise<RecentActivityItem[]> {
+  const db = await getDatabase();
+
+  const problemRows = db.getAllAsync<{
+    attempted_at: string;
+    correct: number;
+    title: string;
+  }>(
+    `
+      SELECT pa.attempted_at, pa.correct, p.title AS title
+      FROM problem_attempts pa
+      JOIN problems p ON p.id = pa.problem_id
+    `
+  );
+
+  const challengeRows = db.getAllAsync<{
+    attempted_at: string;
+    passed: number;
+    title: string;
+  }>(
+    `
+      SELECT ca.attempted_at, ca.passed, c.title AS title
+      FROM challenge_attempts ca
+      JOIN challenges c ON c.id = ca.challenge_id
+    `
+  );
+
+  const [problems, challenges] = await Promise.all([
+    problemRows,
+    challengeRows,
+  ]);
+
+  const items: RecentActivityItem[] = [
+    ...problems.map((row) => ({
+      id: `problem-${row.attempted_at}`,
+      kind: 'problem' as const,
+      title: row.title,
+      success: row.correct === 1,
+      attemptedAt: row.attempted_at,
+    })),
+    ...challenges.map((row) => ({
+      id: `challenge-${row.attempted_at}`,
+      kind: 'challenge' as const,
+      title: row.title,
+      success: row.passed === 1,
+      attemptedAt: row.attempted_at,
+    })),
+  ];
+
+  items.sort(
+    (a, b) =>
+      new Date(b.attemptedAt).getTime() - new Date(a.attemptedAt).getTime()
+  );
+
+  return items.slice(0, limit);
+}
+
+// ---------------------------------------------------------------------------
+// Progression (Phase 6 Step 2)
+//
+// Level + streak + XP surfaced from the same SQLite data, layered on top of
+// the Step 1 aggregation and reusing the existing attempt/completion records.
+// ---------------------------------------------------------------------------
+
+/**
+ * The distinct local calendar dates on which the learner had qualifying
+ * activity (completed a lesson, solved a problem, or completed a challenge).
+ * Opening the app alone does not qualify. Derived entirely from the existing
+ * completion/attempt tables — no duplicate tracking.
+ */
+export async function getQualifyingActivityDates(): Promise<string[]> {
+  const db = await getDatabase();
+
+  const [lessons, problems, challenges] = await Promise.all([
+    db.getAllAsync<{ at: string }>(
+      `
+        SELECT completed_at AS at
+        FROM lesson_progress
+        WHERE status = 'completed' AND completed_at IS NOT NULL
+      `
+    ),
+    db.getAllAsync<{ at: string }>(
+      `
+        SELECT attempted_at AS at
+        FROM problem_attempts
+        WHERE correct = 1
+      `
+    ),
+    db.getAllAsync<{ at: string }>(
+      `
+        SELECT attempted_at AS at
+        FROM challenge_attempts
+        WHERE passed = 1
+      `
+    ),
+  ]);
+
+  const keys = new Set<string>();
+  for (const row of [...lessons, ...problems, ...challenges]) {
+    keys.add(dateKey(new Date(row.at)));
+  }
+
+  return [...keys];
+}
+
+async function getStreaks(): Promise<ReturnType<typeof computeStreaks>> {
+  const dates = await getQualifyingActivityDates();
+  return computeStreaks(new Set(dates));
+}
+
+/**
+ * Current consecutive-day streak derived from qualifying activity records.
+ * Zero when there is no qualifying activity (or a qualifying day was missed).
+ */
+export async function calculateCurrentStreak(): Promise<number> {
+  return (await getStreaks()).currentStreak;
+}
+
+/**
+ * The longest consecutive-day streak the learner has ever achieved. Preserved
+ * even when the current streak resets after a missed day.
+ */
+export async function calculateLongestStreak(): Promise<number> {
+  return (await getStreaks()).longestStreak;
+}
+
+/** Whether the learner had qualifying activity today (local calendar day). */
+export async function hasActivityToday(): Promise<boolean> {
+  return (await getStreaks()).hasActivityToday;
+}
+
+/** Whether the learner had qualifying activity yesterday (local calendar day). */
+export async function hasActivityYesterday(): Promise<boolean> {
+  return (await getStreaks()).hasActivityYesterday;
+}
+
+/**
+ * Full progression snapshot: total XP, deterministic level (with progress
+ * bar data), and streaks computed from qualifying activity records.
+ *
+ * `ProgressionSummary` is layered on top of the stored XP/streak totals, so it
+ * stays consistent with the rest of the app rather than introducing a
+ * competing model.
+ */
+export async function getProgressionSummary(): Promise<ProgressionSummary> {
+  const db = await getDatabase();
+
+  const user = await db.getFirstAsync<{
+    xp: number;
+  }>(`SELECT xp FROM user_progress WHERE id = 1`);
+
+  const totalXP = user?.xp ?? 0;
+  const levelProgress = getLevelProgress(totalXP);
+  const streaks = await getStreaks();
+
+  return {
+    totalXP,
+    level: getLevelFromXP(totalXP),
+    levelProgress,
+    currentStreak: streaks.currentStreak,
+    longestStreak: streaks.longestStreak,
+    hasActivityToday: streaks.hasActivityToday,
+    xpToNextLevel: getXPToNextLevel(totalXP),
   };
 }

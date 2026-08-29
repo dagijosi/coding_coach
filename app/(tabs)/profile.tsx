@@ -18,6 +18,7 @@ import {
   getCompletedLessonsCount,
   getProblemsStats,
   getUserProgress,
+  getLevelProgress,
 } from '@/repositories/progressRepository';
 import type { TopicMastery, UserProgress } from '@/types/progress';
 
@@ -31,10 +32,6 @@ import {
 } from '@/theme';
 
 const LOCAL_PROFILE_NAME = 'Dagi';
-
-function levelFromXp(xp: number): number {
-  return Math.max(1, Math.floor(xp / 100) + 1);
-}
 
 function titleForLevel(level: number): string {
   if (level >= 10) return 'Senior JavaScript Engineer';
@@ -115,10 +112,11 @@ export default function ProfileScreen() {
     );
   }
 
-  const level = levelFromXp(data.progress.xp);
+  const levelProgress = getLevelProgress(data.progress.xp);
+  const level = levelProgress.level;
   const title = titleForLevel(level);
-  const xpIntoLevel = data.progress.xp % 100;
-  const levelProgress = xpIntoLevel / 100;
+  const xpIntoLevel = levelProgress.xpIntoLevel;
+  const requiredForLevel = levelProgress.xpRequiredForLevel;
 
   const attemptedTopics = data.mastery.filter((t) => t.attempts > 0);
   const sortedByMastery = [...attemptedTopics].sort(
@@ -159,11 +157,11 @@ export default function ProfileScreen() {
           <View style={styles.levelRow}>
             <AppText variant="h3">Level {level}</AppText>
             <AppText variant="caption" muted>
-              {xpIntoLevel} / 100 XP
+              {xpIntoLevel} / {requiredForLevel} XP
             </AppText>
           </View>
           <View style={styles.levelBar}>
-            <ProgressBar progress={levelProgress} />
+            <ProgressBar progress={levelProgress.percentage} />
           </View>
         </Card>
       </View>
