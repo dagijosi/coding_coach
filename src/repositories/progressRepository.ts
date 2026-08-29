@@ -9,11 +9,23 @@ import type {
   ProgressSummary,
   ProgressionSummary,
   RecentActivityItem,
-  TopicMastery,
   TopicProgress,
   TopicStrengths,
   UserProgress,
 } from '@/types/progress';
+import type {
+  ConceptMastery,
+  MasteryEvidence,
+  OverallMastery,
+  TopicMastery,
+} from '@/learning/mastery/masteryTypes';
+import {
+  buildConceptMastery,
+  buildTopicMastery,
+  computeOverallMastery,
+  sortStrongest,
+  sortWeakest,
+} from '@/learning/mastery/mastery';
 import {
   getLevelFromXP,
   getLevelProgress,
@@ -44,6 +56,29 @@ export {
   dateKey,
   type StreakResult,
 } from '@/learning/progression/streak';
+export type {
+  ConceptMastery,
+  MasteryEvidence,
+  MasteryLevel,
+  OverallMastery,
+  TopicMastery,
+} from '@/learning/mastery/masteryTypes';
+export {
+  MASTERY_THRESHOLDS,
+  MASTERY_WEIGHTS,
+  RECENT_WINDOW_DAYS,
+  STALE_WINDOW_DAYS,
+  STALE_WEIGHT_FLOOR,
+  attemptWeight,
+  buildConceptMastery,
+  buildTopicMastery,
+  computeMasteryScore,
+  computeOverallMastery,
+  masteryLevelForScore,
+  sortStrongest,
+  sortWeakest,
+  weightedAccuracy,
+} from '@/learning/mastery/mastery';
 
 // ---------------------------------------------------------------------------
 // XP
@@ -799,38 +834,371 @@ export async function getContinueLearningLessonId(): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------------------
-// Topics
+// Topic & skill mastery (Phase 6 Step 3)
+//
+// Evidence-based mastery derived from the existing SQLite tables (lesson
+// completion, problem solves, challenge passes + attempt timestamps). All
+// scoring and leveling is centralized in src/learning/mastery/mastery.ts —
+// screens must consume these results, never re-derive their own percentages.
 // ---------------------------------------------------------------------------
 
-export async function getTopicPerformance(): Promise<TopicMastery[]> {
+type TopicEvidenceRow = {
+  topic_id: string;
+  topic_name: string;
+  lessons_total: number;
+  lessons_completed: number;
+  problems_total: number;
+  problems_solved: number;
+  challenges_total: number;
+  challenges_solved: number;
+};
+
+type TopicAttemptRow = {
+  topic_id: string;
+  kind: 'problem' | 'challenge';
+  ok: number;
+  at: string;
+};
+
+async function loadTopicEvidence(): Promise<Array<{ topicId: string; topicName: string; evidence: MasteryEvidence }>> {
   const db = await getDatabase();
 
-  const rows = await db.getAllAsync<{
-    topic: string;
-    attempts: number;
-    correct_attempts: number;
-    mastery: number;
-  }>(
-    `
-      SELECT
-        t.name AS topic,
-        COUNT(pa.id) AS attempts,
-        SUM(pa.correct) AS correct_attempts,
-        CAST(SUM(pa.correct) AS REAL) / COUNT(pa.id) AS mastery
-      FROM problem_attempts pa
-      JOIN problems p ON p.id = pa.problem_id
-      JOIN lessons l ON l.id = p.lesson_id
-      JOIN topics t ON t.id = l.topic_id
-      GROUP BY t.id
-    `
-  );
+  const [aggregates, attempts, completions] = await Promise.all([
+    db.getAllAsync<TopicEvidenceRow>(
+      `
+        SELECT
+          t.id AS topic_id,
+          t.name AS topic_name,
+          COUNT(DISTINCT l.id) AS lessons_total,
+          COUNT(DISTINCT CASE WHEN lp.status = 'completed' THEN l.id END) AS lessons_completed,
+          COUNT(DISTINCT p.id) AS problems_total,
+          COUNT(DISTINCT CASE WHEN pa.correct = 1 THEN p.id END) AS problems_solved,
+          COUNT(DISTINCT ch.id) AS challenges_total,
+          COUNT(DISTINCT CASE WHEN ca.passed = 1 THEN ch.id END) AS challenges_solved
+        FROM topics t
+        LEFT JOIN lessons l ON l.topic_id = t.id
+        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id
+        LEFT JOIN problems p ON p.lesson_id = l.id
+        LEFT JOIN problem_attempts pa ON pa.problem_id = p.id
+        LEFT JOIN challenges ch ON ch.lesson_id = l.id
+        LEFT JOIN challenge_attempts ca ON ca.challenge_id = ch.id
+        GROUP BY t.id, t.name
+        ORDER BY t."order" ASC, t.name ASC
+      `
+    ),
+    db.getAllAsync<TopicAttemptRow>(
+      `
+        SELECT t.id AS topic_id, pa.attempted_at AS at, pa.correct AS ok, 'problem' AS kind
+        FROM problem_attempts pa
+        JOIN problems p ON p.id = pa.problem_id
+        JOIN lessons l ON l.id = p.lesson_id
+        JOIN topics t ON t.id = l.topic_id
+        UNION ALL
+        SELECT t.id, ca.attempted_at, ca.passed, 'challenge'
+        FROM challenge_attempts ca
+        JOIN challenges ch ON ch.id = ca.challenge_id
+        JOIN lessons l ON l.id = ch.lesson_id
+        JOIN topics t ON t.id = l.topic_id
+      `
+    ),
+    db.getAllAsync<{ topic_id: string; at: string }>(
+      `
+        SELECT t.id AS topic_id, lp.completed_at AS at
+        FROM lesson_progress lp
+        JOIN lessons l ON l.id = lp.lesson_id
+        JOIN topics t ON t.id = l.topic_id
+        WHERE lp.status = 'completed' AND lp.completed_at IS NOT NULL
+      `
+    ),
+  ]);
 
-  return rows.map((row) => ({
-    topic: row.topic,
-    attempts: row.attempts,
-    correctAttempts: row.correct_attempts,
-    mastery: row.mastery,
-  }));
+  const attemptsByTopic = new Map<string, TopicAttemptRow[]>();
+  for (const row of attempts) {
+    const list = attemptsByTopic.get(row.topic_id) ?? [];
+    list.push(row);
+    attemptsByTopic.set(row.topic_id, list);
+  }
+
+  const completionDatesByTopic = new Map<string, string[]>();
+  for (const row of completions) {
+    const list = completionDatesByTopic.get(row.topic_id) ?? [];
+    list.push(row.at);
+    completionDatesByTopic.set(row.topic_id, list);
+  }
+
+  return aggregates.map((agg) => {
+    const topicAttempts =
+      attemptsByTopic.get(agg.topic_id) ?? [];
+
+    const problemAttempts = topicAttempts
+      .filter((a) => a.kind === 'problem')
+      .map((a) => ({ success: a.ok === 1, attemptedAt: a.at }));
+    const challengeAttempts = topicAttempts
+      .filter((a) => a.kind === 'challenge')
+      .map((a) => ({ success: a.ok === 1, attemptedAt: a.at }));
+
+    const allActivity = [
+      ...topicAttempts.map((a) => a.at),
+      ...(completionDatesByTopic.get(agg.topic_id) ?? []),
+    ];
+    const lastActivityAt =
+      allActivity.length === 0
+        ? null
+        : new Date(
+            allActivity
+              .map((at) => new Date(at).getTime())
+              .reduce((max, t) => Math.max(max, t), 0)
+          ).toISOString();
+
+    const evidence: MasteryEvidence = {
+      lessonsCompleted: agg.lessons_completed,
+      lessonsTotal: agg.lessons_total,
+      problemsSolved: agg.problems_solved,
+      problemsTotal: agg.problems_total,
+      challengesSolved: agg.challenges_solved,
+      challengesTotal: agg.challenges_total,
+      problemAttempts,
+      challengeAttempts,
+      lastActivityAt,
+    };
+
+    return {
+      topicId: agg.topic_id,
+      topicName: agg.topic_name,
+      evidence,
+    };
+  });
+}
+
+/** Evidence-based mastery for every topic, in content order. */
+export async function getTopicMastery(
+  now = new Date()
+): Promise<TopicMastery[]> {
+  const rows = await loadTopicEvidence();
+  return rows.map((r) => buildTopicMastery(r.topicId, r.topicName, r.evidence, now));
+}
+
+/**
+ * The strongest `limit` topics by mastery score (started topics only). Scores
+ * tie-break on topic name, then id — deterministic.
+ */
+export async function getStrongestTopics(
+  limit = 3,
+  now = new Date()
+): Promise<TopicMastery[]> {
+  const started = (await getTopicMastery(now)).filter(
+    (t) => t.masteryScore > 0
+  );
+  return sortStrongest(started).slice(0, limit);
+}
+
+/**
+ * The weakest `limit` started topics by mastery score. Ties break on topic
+ * name, then id — deterministic.
+ */
+export async function getWeakestTopics(
+  limit = 3,
+  now = new Date()
+): Promise<TopicMastery[]> {
+  const started = (await getTopicMastery(now)).filter(
+    (t) => t.masteryScore > 0
+  );
+  return sortWeakest(started).slice(0, limit);
+}
+
+/** Topics with no learning evidence at all (mastery 0), in content order. */
+export async function getUnpracticedTopics(
+  now = new Date()
+): Promise<TopicMastery[]> {
+  return (await getTopicMastery(now)).filter(
+    (t) => t.masteryScore === 0
+  );
+}
+
+/**
+ * Overall mastery across topics. Averaged over started topics only so that
+ * unpracticed content does not drag the figure toward zero.
+ */
+export async function getOverallMastery(
+  now = new Date()
+): Promise<OverallMastery> {
+  return computeOverallMastery(await getTopicMastery(now));
+}
+
+// ---------------------------------------------------------------------------
+// Concept mastery
+//
+// Concepts map 1:1 to lessons (concepts.lesson_id). Evidence for a concept is
+// therefore the lesson's completion plus the problems/challenges of that same
+// lesson. This is a real, schema-backed relationship — nothing is invented.
+// ---------------------------------------------------------------------------
+
+type ConceptRow = {
+  concept_id: string;
+  concept_name: string;
+  lesson_id: string;
+  topic_id: string;
+  topic_name: string;
+};
+
+type LessonEvidenceRow = {
+  lesson_id: string;
+  lessons_completed: number;
+  lessons_total: number;
+  problems_total: number;
+  problems_solved: number;
+  challenges_total: number;
+  challenges_solved: number;
+};
+
+type LessonAttemptRow = {
+  lesson_id: string;
+  kind: 'problem' | 'challenge';
+  ok: number;
+  at: string;
+};
+
+/** Evidence-based mastery for every concept, in course/topic/lesson order. */
+export async function getConceptMastery(
+  now = new Date()
+): Promise<ConceptMastery[]> {
+  const db = await getDatabase();
+
+  const [concepts, lessonStats, attempts, completions] = await Promise.all([
+    db.getAllAsync<ConceptRow>(
+      `
+        SELECT
+          c.id AS concept_id,
+          c.name AS concept_name,
+          c.lesson_id AS lesson_id,
+          t.id AS topic_id,
+          t.name AS topic_name
+        FROM concepts c
+        JOIN lessons l ON l.id = c.lesson_id
+        JOIN topics t ON t.id = l.topic_id
+        ORDER BY t."order" ASC, l."order" ASC, c."order" ASC
+      `
+    ),
+    db.getAllAsync<LessonEvidenceRow>(
+      `
+        SELECT
+          l.id AS lesson_id,
+          COUNT(DISTINCT p.id) AS problems_total,
+          COUNT(DISTINCT CASE WHEN pa.correct = 1 THEN p.id END) AS problems_solved,
+          COUNT(DISTINCT ch.id) AS challenges_total,
+          COUNT(DISTINCT CASE WHEN ca.passed = 1 THEN ch.id END) AS challenges_solved,
+          CASE WHEN lp.status = 'completed' THEN 1 ELSE 0 END AS lessons_completed,
+          1 AS lessons_total
+        FROM lessons l
+        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id
+        LEFT JOIN problems p ON p.lesson_id = l.id
+        LEFT JOIN problem_attempts pa ON pa.problem_id = p.id
+        LEFT JOIN challenges ch ON ch.lesson_id = l.id
+        LEFT JOIN challenge_attempts ca ON ca.challenge_id = ch.id
+        GROUP BY l.id
+      `
+    ),
+    db.getAllAsync<LessonAttemptRow>(
+      `
+        SELECT l.id AS lesson_id, pa.attempted_at AS at, pa.correct AS ok, 'problem' AS kind
+        FROM problem_attempts pa
+        JOIN problems p ON p.id = pa.problem_id
+        JOIN lessons l ON l.id = p.lesson_id
+        UNION ALL
+        SELECT l.id, ca.attempted_at, ca.passed, 'challenge'
+        FROM challenge_attempts ca
+        JOIN challenges ch ON ch.id = ca.challenge_id
+        JOIN lessons l ON l.id = ch.lesson_id
+      `
+    ),
+    db.getAllAsync<{ lesson_id: string; at: string }>(
+      `
+        SELECT lp.lesson_id AS lesson_id, lp.completed_at AS at
+        FROM lesson_progress lp
+        WHERE lp.status = 'completed' AND lp.completed_at IS NOT NULL
+      `
+    ),
+  ]);
+
+  const statsByLesson = new Map<string, LessonEvidenceRow>();
+  for (const row of lessonStats) {
+    statsByLesson.set(row.lesson_id, row);
+  }
+
+  const attemptsByLesson = new Map<string, LessonAttemptRow[]>();
+  for (const row of attempts) {
+    const list = attemptsByLesson.get(row.lesson_id) ?? [];
+    list.push(row);
+    attemptsByLesson.set(row.lesson_id, list);
+  }
+
+  const completionDatesByLesson = new Map<string, string[]>();
+  for (const row of completions) {
+    const list = completionDatesByLesson.get(row.lesson_id) ?? [];
+    list.push(row.at);
+    completionDatesByLesson.set(row.lesson_id, list);
+  }
+
+  const mastery: ConceptMastery[] = [];
+
+  for (const c of concepts) {
+    const stats = statsByLesson.get(c.lesson_id) ?? {
+      lesson_id: c.lesson_id,
+      lessons_completed: 0,
+      lessons_total: 1,
+      problems_total: 0,
+      problems_solved: 0,
+      challenges_total: 0,
+      challenges_solved: 0,
+    };
+    const lessonAttempts = attemptsByLesson.get(c.lesson_id) ?? [];
+
+    const problemAttempts = lessonAttempts
+      .filter((a) => a.kind === 'problem')
+      .map((a) => ({ success: a.ok === 1, attemptedAt: a.at }));
+    const challengeAttempts = lessonAttempts
+      .filter((a) => a.kind === 'challenge')
+      .map((a) => ({ success: a.ok === 1, attemptedAt: a.at }));
+
+    const allActivity = [
+      ...lessonAttempts.map((a) => a.at),
+      ...(completionDatesByLesson.get(c.lesson_id) ?? []),
+    ];
+    const lastActivityAt =
+      allActivity.length === 0
+        ? null
+        : new Date(
+            allActivity
+              .map((at) => new Date(at).getTime())
+              .reduce((max, t) => Math.max(max, t), 0)
+          ).toISOString();
+
+    const evidence: MasteryEvidence = {
+      lessonsCompleted: stats.lessons_completed,
+      lessonsTotal: stats.lessons_total,
+      problemsSolved: stats.problems_solved,
+      problemsTotal: stats.problems_total,
+      challengesSolved: stats.challenges_solved,
+      challengesTotal: stats.challenges_total,
+      problemAttempts,
+      challengeAttempts,
+      lastActivityAt,
+    };
+
+    mastery.push(
+      buildConceptMastery(
+        c.concept_id,
+        c.concept_name,
+        c.topic_id,
+        c.topic_name,
+        c.lesson_id,
+        evidence,
+        now
+      )
+    );
+  }
+
+  return mastery;
 }
 
 // ---------------------------------------------------------------------------

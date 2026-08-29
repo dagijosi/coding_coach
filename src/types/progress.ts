@@ -8,13 +8,6 @@ export type UserProgress = {
   lastActivityDate: string | null;
 };
 
-export type TopicMastery = {
-  topic: string;
-  attempts: number;
-  correctAttempts: number;
-  mastery: number;
-};
-
 // ---------------------------------------------------------------------------
 // Progress aggregation (Phase 6)
 //

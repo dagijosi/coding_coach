@@ -13,14 +13,16 @@ import {
 import { TabScreen } from '@/components/navigation';
 
 import {
-  getTopicPerformance,
   getChallengesCompleted,
   getCompletedLessonsCount,
   getProblemsStats,
   getUserProgress,
   getLevelProgress,
+  getStrongestTopics,
+  getWeakestTopics,
 } from '@/repositories/progressRepository';
-import type { TopicMastery, UserProgress } from '@/types/progress';
+import type { TopicMastery } from '@/learning/mastery/masteryTypes';
+import type { UserProgress } from '@/types/progress';
 
 import {
   radius,
@@ -46,7 +48,8 @@ type ProfileData = {
   lessonsCompleted: number;
   problemsSolved: number;
   challengesCompleted: number;
-  mastery: TopicMastery[];
+  weakTopics: TopicMastery[];
+  strongTopics: TopicMastery[];
 };
 
 const APPEARANCE_OPTIONS: Array<{
@@ -72,14 +75,18 @@ export default function ProfileScreen() {
       const lessonsCompleted = await getCompletedLessonsCount();
       const problems = await getProblemsStats();
       const challengesCompleted = await getChallengesCompleted();
-      const mastery = await getTopicPerformance();
+      const [weakTopics, strongTopics] = await Promise.all([
+        getWeakestTopics(3),
+        getStrongestTopics(3),
+      ]);
 
       setData({
         progress,
         lessonsCompleted,
         problemsSolved: problems.solved,
         challengesCompleted,
-        mastery,
+        weakTopics,
+        strongTopics,
       });
       setError(false);
     } catch (e) {
@@ -112,18 +119,14 @@ export default function ProfileScreen() {
     );
   }
 
-  const levelProgress = getLevelProgress(data.progress.xp);
+const levelProgress = getLevelProgress(data.progress.xp);
   const level = levelProgress.level;
   const title = titleForLevel(level);
   const xpIntoLevel = levelProgress.xpIntoLevel;
   const requiredForLevel = levelProgress.xpRequiredForLevel;
 
-  const attemptedTopics = data.mastery.filter((t) => t.attempts > 0);
-  const sortedByMastery = [...attemptedTopics].sort(
-    (a, b) => a.mastery - b.mastery
-  );
-  const weakTopics = sortedByMastery.slice(0, 3);
-  const strongTopics = [...sortedByMastery].reverse().slice(0, 3);
+  const weakTopics = data.weakTopics;
+  const strongTopics = data.strongTopics;
 
   return (
     <TabScreen>
@@ -281,12 +284,12 @@ function TopicList({
       ) : (
         <View style={styles.topicList}>
           {topics.map((topic) => (
-            <View key={topic.topic} style={styles.topicRow}>
+            <View key={topic.topicId} style={styles.topicRow}>
               <AppText variant="bodySmall" style={styles.flex}>
-                {topic.topic}
+                {topic.topicName}
               </AppText>
               <AppText variant="bodySmall" style={{ color }}>
-                {Math.round(topic.mastery * 100)}%
+                {topic.masteryScore}%
               </AppText>
             </View>
           ))}
