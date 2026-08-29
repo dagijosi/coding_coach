@@ -3,7 +3,10 @@ import { useEffect, useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
-import { seedDatabase } from '@/database/seed';
+import {
+  initializeDatabase,
+  repairDatabase,
+} from '@/database';
 import { ToastProvider } from '@/components/toast';
 import { WebViewEngineHost } from '@/code/engine/WebViewEngineHost';
 import { ThemeProvider, useTheme } from '@/theme';
@@ -36,7 +39,13 @@ export default function RootLayout() {
   useEffect(() => {
     async function initialize() {
       try {
-        await seedDatabase();
+        // Normal offline-first startup: migrate + seed.
+        const ok = await initializeDatabase();
+        if (!ok) {
+          // Initialization failed (e.g. corrupt/missing schema). Recover by
+          // rebuilding the database from scratch so the app still launches.
+          await repairDatabase();
+        }
       } catch (error) {
         console.error(
           'Failed to initialize database:',

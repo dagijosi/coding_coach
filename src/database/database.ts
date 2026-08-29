@@ -1,50 +1,99 @@
 import * as SQLite from 'expo-sqlite';
+import type { SQLiteDatabase } from 'expo-sqlite';
 
-import { runMigrations } from './migrations';
+import { runMigrations, rebuildSchema } from './migrations';
+import { seedDatabase } from './seed';
 
-let database: SQLite.SQLiteDatabase | null = null;
+let database: SQLiteDatabase | null = null;
+let opening: Promise<SQLiteDatabase> | null = null;
 
-export async function getDatabase() {
+const DB_NAME = 'coding-coach.db';
+
+/**
+ * Returns the opened database, applying schema migrations on first use.
+ *
+ * Safe to call anywhere, any number of times, including in parallel during
+ * first render: a single shared promise deduplicates the open + migrate work.
+ * Reasonably fast because migrations are a no-op once the schema is current
+ * and content seeding is version-guarded.
+ */
+export async function getDatabase(): Promise<SQLiteDatabase> {
   if (database) {
     return database;
   }
 
-  database = await SQLite.openDatabaseAsync(
-    'coding-coach.db'
-  );
-
-  await runMigrations(database);
-
-  return database;
-}
-
-export async function resetDatabase() {
-  if (database) {
-    await database.closeAsync();
-    database = null;
+  if (!opening) {
+    opening = (async () => {
+      const db = await SQLite.openDatabaseAsync(DB_NAME);
+      // WAL must be set outside any transaction (SQLite rejects changing
+      // journal_mode from within one), so it is done here at open time.
+      await db.execAsync('PRAGMA journal_mode = WAL;');
+      await runMigrations(db);
+      database = db;
+      return db;
+    })();
   }
 
-  const freshDatabase =
-    await SQLite.openDatabaseAsync(
-      'coding-coach.db'
-    );
+  return opening;
+}
 
-  await freshDatabase.execAsync(`
-    DROP TABLE IF EXISTS challenge_attempts;
-    DROP TABLE IF EXISTS problem_attempts;
-    DROP TABLE IF EXISTS lesson_progress;
-    DROP TABLE IF EXISTS user_progress;
-    DROP TABLE IF EXISTS test_cases;
-    DROP TABLE IF EXISTS hints;
-    DROP TABLE IF EXISTS challenges;
-    DROP TABLE IF EXISTS problems;
-    DROP TABLE IF EXISTS concepts;
-    DROP TABLE IF EXISTS lessons;
-    DROP TABLE IF EXISTS topics;
-    DROP TABLE IF EXISTS courses;
-  `);
+/**
+ * Full offline-first startup sequence: open + migrate, then ensure content is
+ * seeded. Returns true on success.
+ *
+ * This is the single entry point used by app startup. Everything it does is
+ * local; it never requires network access.
+ */
+export async function initializeDatabase(): Promise<boolean> {
+  try {
+    const db = await getDatabase();
+    await seedDatabase(db);
+    return Boolean(db);
+  } catch (error) {
+    console.error('Database initialization failed:', error);
+    return false;
+  }
+}
 
-  database = freshDatabase;
+/**
+ * Wipes and recreates the whole database (schema + content + progress).
+ *
+ * Explicitly destructive: all user progress, XP and streak are lost. Used for
+ * a deliberate "reset progress" / clean-slate flow. Afterwards the database is
+ * fully re-initialised.
+ */
+export async function resetDatabase(): Promise<void> {
+  const db = await getDatabase();
 
-  await runMigrations(database);
+  await rebuildSchema(db);
+  await seedDatabase(db);
+}
+
+/**
+ * Last-resort recovery for a corrupt/unreadable database.
+ *
+ * Closes the current handle, deletes the database files, reopens a fresh
+ * database and re-runs the full init (schema + seed). Loses all progress, but
+ * guarantees the app can still start instead of dead-ending on a broken file.
+ *
+ * Only call when normal initialization has failed.
+ */
+export async function repairDatabase(): Promise<void> {
+  if (database) {
+    await database.closeAsync().catch(() => {
+      // Best effort; the handle may already be unusable.
+    });
+    database = null;
+  }
+  opening = null;
+
+  try {
+    await SQLite.deleteDatabaseAsync(DB_NAME).catch(() => {
+      // The file may not exist; ignore.
+    });
+  } finally {
+    // Always re-open, even if deletion threw.
+  }
+
+  await initializeDatabase();
 }
