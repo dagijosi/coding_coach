@@ -64,6 +64,8 @@ const DIFFICULTY_TINT: Record<
   easy: 'success',
   medium: 'warning',
   hard: 'error',
+  intermediate: 'warning',
+  advanced: 'error',
 };
 
 export default function PracticeScreen() {

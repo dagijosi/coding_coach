@@ -4,7 +4,20 @@ import {
   shouldSeedContent,
 } from './contentVersion';
 import { jsLearningContent } from '@/data/content/javascript';
+import { pythonLearningContent } from '@/data/content/python';
+import { typescriptLearningContent } from '@/data/content/typescript';
 import type { SQLiteDatabase } from 'expo-sqlite';
+
+// Merge all language courses into one content bundle
+const allContent = {
+  courses:    [...jsLearningContent.courses,    ...pythonLearningContent.courses,    ...typescriptLearningContent.courses],
+  topics:     [...jsLearningContent.topics,     ...pythonLearningContent.topics,     ...typescriptLearningContent.topics],
+  lessons:    [...jsLearningContent.lessons,    ...pythonLearningContent.lessons,    ...typescriptLearningContent.lessons],
+  concepts:   [...jsLearningContent.concepts,   ...pythonLearningContent.concepts,   ...typescriptLearningContent.concepts],
+  problems:   [...jsLearningContent.problems,   ...pythonLearningContent.problems,   ...typescriptLearningContent.problems],
+  challenges: [...jsLearningContent.challenges, ...pythonLearningContent.challenges, ...typescriptLearningContent.challenges],
+};
+
 
 /**
  * Writes the bundled learning content into the database.
@@ -14,7 +27,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * `shouldSeedContent`), so an already-seeded install skips this on launch.
  */
 async function insertContent(db: SQLiteDatabase) {
-  const content = jsLearningContent;
+  const content = allContent;
 
   await db.withExclusiveTransactionAsync(async (txn) => {
     // ----- courses -----

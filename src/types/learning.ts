@@ -2,7 +2,9 @@ export type Difficulty =
   | 'beginner'
   | 'easy'
   | 'medium'
-  | 'hard';
+  | 'hard'
+  | 'intermediate'
+  | 'advanced';
 
 // ---------------------------------------------------------------------------
 // Content hierarchy
