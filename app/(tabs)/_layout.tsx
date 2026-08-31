@@ -14,6 +14,7 @@ export default function TabsLayout() {
         <Tabs.Screen name="index" />
         <Tabs.Screen name="learn" />
         <Tabs.Screen name="practice" />
+        <Tabs.Screen name="coach" />
         <Tabs.Screen name="profile" />
       </Tabs>
 

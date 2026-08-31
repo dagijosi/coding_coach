@@ -29,6 +29,7 @@ import {
   Screen,
 } from '@/components/ui';
 import { useToast } from '@/components/toast';
+import { useSessionStore } from '@/store/sessionStore';
 
 import { getLessonById } from '@/repositories/lessonRepository';
 import { getConceptsByLesson } from '@/repositories/conceptRepository';
@@ -173,6 +174,9 @@ export default function LessonScreen() {
         setConcepts(conceptsData);
         setProblems(problemsData);
         setChallenges(challengesData);
+        useSessionStore
+          .getState()
+          .setCurrentLesson({ id: lessonData.id, title: lessonData.title });
         startLesson(lessonData.id).catch(() => {
           // Non-blocking.
         });

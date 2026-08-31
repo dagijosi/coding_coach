@@ -77,6 +77,12 @@ const ITEMS: DockItemConfig[] = [
     primary: true,
   },
   {
+    route: '/coach',
+    label: 'Coach',
+    icon: 'chatbubbles-outline',
+    iconActive: 'chatbubbles',
+  },
+  {
     route: '/profile',
     label: 'Me',
     icon: 'person-outline',
