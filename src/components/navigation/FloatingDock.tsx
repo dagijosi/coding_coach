@@ -32,14 +32,14 @@ import {
 
 export const DOCK_HEIGHT = 72;
 export const DOCK_BOTTOM_OFFSET = 14;
-export const DOCK_WIDTH = 0.92;
+export const DOCK_WIDTH = 0.94;
 
 // Space we need below the scroll content so it clears the floating dock.
 export function dockClearance(bottom: number): number {
   return bottom + DOCK_BOTTOM_OFFSET + DOCK_HEIGHT + 16;
 }
 
-const PILL_WIDTH = 70;
+const PILL_WIDTH = 64;
 const PILL_HEIGHT = 56;
 const PILL_RADIUS = 18;
 
@@ -293,7 +293,11 @@ function DockItem({
             </Animated.View>
           </Animated.View>
 
-          <Animated.Text style={[styles.label, labelStyle]}>
+          <Animated.Text
+            style={[styles.label, labelStyle]}
+            numberOfLines={1}
+            ellipsizeMode="clip"
+          >
             {item.label}
           </Animated.Text>
         </View>
@@ -323,7 +327,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-around',
-      paddingHorizontal: spacing.sm + 2,
+      paddingHorizontal: spacing.xs,
       ...shadows.small,
     },
 
@@ -344,8 +348,9 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'center',
       gap: 2,
-      paddingHorizontal: 16,
-      paddingVertical: 6,
+      paddingHorizontal: 2,
+      paddingVertical: 4,
+      width: '100%',
     },
 
     iconStack: {
@@ -364,8 +369,10 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     label: {
-      fontSize: typography.caption.fontSize,
-      lineHeight: typography.caption.lineHeight,
+      fontSize: 11,
+      lineHeight: 14,
       fontWeight: '600',
+      textAlign: 'center',
+      letterSpacing: -0.2,
     },
   });

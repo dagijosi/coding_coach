@@ -93,47 +93,47 @@ export const lightColors: ThemeColors = {
 
 export const darkColors: ThemeColors = {
   background: {
-    primary: '#0C120F',
-    secondary: '#101713',
-    tertiary: '#141D19',
+    primary: '#050706',
+    secondary: '#0B0E0C',
+    tertiary: '#101412',
   },
 
   surface: {
-    primary: '#141C18',
-    secondary: '#1A241F',
-    elevated: '#1B2621',
+    primary: '#111613',
+    secondary: '#171E1A',
+    elevated: '#1D2621',
   },
 
   border: {
-    default: '#29342E',
-    strong: '#34413A',
+    default: '#222C26',
+    strong: '#2E3A33',
   },
 
   text: {
-    primary: '#E9F0EC',
-    secondary: '#9CA9A1',
-    muted: '#6B7871',
-    inverse: '#0D1511',
+    primary: '#F2F7F4',
+    secondary: '#A4B4AC',
+    muted: '#68776F',
+    inverse: '#050706',
   },
 
   accent: {
-    primary: '#72B394',
-    secondary: '#8BC3A8',
-    soft: '#263F33',
-    pressed: '#85C5A2',
+    primary: '#4EBA86',
+    secondary: '#68CD9B',
+    soft: '#142C20',
+    pressed: '#41A073',
   },
 
   status: {
-    success: '#7FA98A',
-    warning: '#C9954A',
-    error: '#CE7B74',
-    info: '#7C9DB8',
+    success: '#52B788',
+    warning: '#E0A458',
+    error: '#E26D64',
+    info: '#6BA4D6',
   },
 
   difficulty: {
-    easy: '#7FA98A',
-    medium: '#C9954A',
-    hard: '#CE7B74',
+    easy: '#52B788',
+    medium: '#E0A458',
+    hard: '#E26D64',
   },
 
   white: '#FFFFFF',
