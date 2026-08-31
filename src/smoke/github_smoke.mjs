@@ -302,9 +302,9 @@ ok('bridge keeps related fields null (no hallucination)', built.relatedLesson ==
 
 // ---- 7. Security: credentials never persist to SQLite ----
 console.log('  Security (source-level)');
-const SCHEMA = readFileSync(`${REPO}\\src\\database\\schema.ts`, 'utf8');
-const GH_REPO = readFileSync(`${REPO}\\src\\github\\repository\\githubRepository.ts`, 'utf8');
-const SECURE = readFileSync(`${REPO}\\src\\github\\secureTokenStore.ts`, 'utf8');
+const SCHEMA = readFileSync(join(REPO, 'src', 'database', 'schema.ts'), 'utf8');
+const GH_REPO = readFileSync(join(REPO, 'src', 'github', 'repository', 'githubRepository.ts'), 'utf8');
+const SECURE = readFileSync(join(REPO, 'src', 'github', 'secureTokenStore.ts'), 'utf8');
 const TOKEN_COLUMNS = ['access_token', 'refresh_token', 'client_secret', 'password'];
 const tokenColumnFound = TOKEN_COLUMNS.some((col) => GH_REPO.includes(col) || SCHEMA.includes(col));
 ok('no credential columns in SQLite GitHub tables', tokenColumnFound === false, 'tokens live only in secure store');
