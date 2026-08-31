@@ -12,6 +12,7 @@ import type { ProgressSummary } from '@/types/progress';
 import type { TopicMastery } from '@/learning/mastery/masteryTypes';
 import type { WeakArea } from '@/learning/weakareas/weakAreaTypes';
 import type { LearningContext } from './learningContextTypes';
+import type { HintLevel } from '@/learning/hint/hintTypes';
 
 export type CoachIntent =
   | 'greeting'
@@ -25,6 +26,7 @@ export type CoachIntent =
   | 'weakArea'
   | 'lessonHelp'
   | 'problemHelp'
+  | 'solution'
   | 'unknown';
 
 export type SuggestedActionType =
@@ -33,7 +35,10 @@ export type SuggestedActionType =
   | 'practice_problem'
   | 'try_challenge'
   | 'review_concept'
-  | 'view_progress';
+  | 'view_progress'
+  | 'next_hint'
+  | 'retry_problem'
+  | 'view_solution';
 
 /**
  * A reference to something the learner can do next. The UI decides how to
@@ -64,7 +69,14 @@ export type CoachResponse = {
    * history.
    */
   revealedHintId?: string;
+  /**
+   * The progressive teaching level of the hint/explanation shown (Phase 7
+   * Step 4). Present on hint and solution responses.
+   */
+  hintLevel?: HintLevel;
 };
+
+export type { HintLevel } from '@/learning/hint/hintTypes';
 
 // ---------------------------------------------------------------------------
 // Pure-engine input (structures passed by the service from repositories)
@@ -101,6 +113,8 @@ export type CoachData = {
   weakAreas: WeakArea[];
   solvedProblemIds: ReadonlySet<string>;
   completedChallengeIds: ReadonlySet<string>;
+  /** Per-problem attempt flags (from progress), for attempt-aware hints. */
+  problemPractice: Map<string, { solved: boolean; failed: boolean; attempted: boolean }>;
 };
 
 export type BuildCoachResponseOptions = {

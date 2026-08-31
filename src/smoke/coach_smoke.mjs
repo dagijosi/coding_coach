@@ -57,11 +57,17 @@ const intent = loadTs('src\\learning\\coach\\intent.ts');
 const contentMatch = loadTs('src\\learning\\coach\\contentMatch.ts');
 const hintProg = loadTs('src\\learning\\coach\\hintProgression.ts');
 const practiceSel = loadTs('src\\learning\\coach\\practiceSelection.ts');
+const hintEngine = loadTs('src\\learning\\hint\\hintEngine.ts', {
+  '@/learning/coach/hintProgression': hintProg,
+});
+const explanationEngine = loadTs('src\\learning\\explanation\\explanationEngine.ts');
 const engine = loadTs('src\\learning\\coach\\coachEngine.ts', {
   './intent': intent,
   './contentMatch': contentMatch,
   './hintProgression': hintProg,
   './practiceSelection': practiceSel,
+  '@/learning/hint/hintEngine': hintEngine,
+  '@/learning/explanation/explanationEngine': explanationEngine,
 });
 
 // ---------------------------------------------------------------------------
@@ -163,6 +169,7 @@ function makeData(overrides = {}) {
     weakAreas: ctx.weakAreas,
     solvedProblemIds: new Set(),
     completedChallengeIds: new Set(),
+    problemPractice: new Map(),
   };
   return Object.assign(base, overrides);
 }

@@ -16,6 +16,7 @@ import { getLessons } from '@/repositories/lessonRepository';
 import { getProblems } from '@/repositories/problemRepository';
 import {
   getCompletedChallengeIds,
+  getProblemPracticeData,
   getSolvedProblemIds,
 } from '@/repositories/progressRepository';
 import { buildLearningContext } from '@/services/learningContextBuilder';
@@ -63,7 +64,7 @@ export async function loadCoachData(
   context: AssistantContext,
   now = new Date()
 ): Promise<CoachData> {
-  const [learningContext, concepts, lessons, problems, challenges, solvedProblemIds, completedChallengeIds] =
+  const [learningContext, concepts, lessons, problems, challenges, solvedProblemIds, completedChallengeIds, problemPractice] =
     await Promise.all([
       buildLearningContext(context.currentLessonId || null, now),
       getConcepts(),
@@ -72,6 +73,7 @@ export async function loadCoachData(
       getChallenges(),
       getSolvedProblemIds(),
       getCompletedChallengeIds(),
+      getProblemPracticeData(),
     ]);
 
   return {
@@ -85,6 +87,9 @@ export async function loadCoachData(
     weakAreas: learningContext.weakAreas,
     solvedProblemIds: new Set(solvedProblemIds),
     completedChallengeIds: new Set(completedChallengeIds),
+    problemPractice: new Map(
+      problemPractice.map((p) => [p.problemId, { solved: p.solved, failed: p.failed, attempted: p.attempted }])
+    ),
   };
 }
 

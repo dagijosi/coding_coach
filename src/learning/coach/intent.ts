@@ -108,6 +108,17 @@ const EXAMPLE = [
   'for instance',
 ];
 
+const SOLUTION = [
+  'show me the answer',
+  'give me the solution',
+  'show me the solution',
+  'what is the answer',
+  'the answer',
+  'the solution',
+  'solution please',
+  'answer please',
+];
+
 function hasAny(text: string, words: readonly string[]): boolean {
   // Word-boundary aware: "hi" must match as a whole word, not inside "hint".
   const wordRe = new RegExp(`(?:^|[^a-z0-9])(${words.join('|')})(?=$|[^a-z0-9])`);
@@ -148,6 +159,10 @@ export function detectIntent(message: string): CoachIntent {
 
   if (hasAny(text, PROBLEM_HELP)) {
     return 'problemHelp';
+  }
+
+  if (hasAny(text, SOLUTION)) {
+    return 'solution';
   }
 
   if (hasAny(text, LESSON_HELP)) {

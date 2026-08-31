@@ -21,16 +21,21 @@ import {
   matchConcepts,
   matchLessons,
 } from './contentMatch';
-import { nextHintFor } from './hintProgression';
 import { selectPractice } from './practiceSelection';
+import { commandHint } from '@/learning/hint/hintEngine';
+import {
+  explainConcept as buildConceptExplanation,
+  explainProblem as buildProblemExplanation,
+} from '@/learning/explanation/explanationEngine';
 import type {
   BuildCoachResponseOptions,
   CoachData,
   CoachIntent,
   CoachRequest,
   CoachResponse,
+  ConversationMessageLike,
 } from './coachTypes';
-import type { Concept, Lesson } from '@/types/learning';
+import type { Concept, Lesson, Problem } from '@/types/learning';
 
 function emptyResponse(intent: CoachIntent): CoachResponse {
   return {
@@ -306,116 +311,125 @@ function explainConcept(
 ): CoachResponse {
   const response = emptyResponse('explanation');
   response.relatedConcept = { id: concept.id, name: concept.name };
-  response.message = `Here is what ${topic || concept.name} is about:\n\n${concept.summary}`;
   const lesson = lessonForConcept(data.lessons, concept);
+  const related =
+    data.problems.find((p) => p.lessonId === concept.lessonId) ?? null;
+
+  // Build the teaching-structure message from stored content (ExplanationEngine).
+  const built = buildConceptExplanation({
+    concept,
+    lesson,
+    relatedProblem: related,
+  });
+  response.message = `Here is what ${topic || concept.name} is about:\n\n${built.message}`;
+  response.actions = built.actions;
   if (lesson) {
     response.relatedLesson = { id: lesson.id, title: lesson.title };
-    const related = data.problems.find(
-      (p) => p.lessonId === concept.lessonId
-    );
-    if (related) {
-      response.message += `\n\nTo practice, try "${related.title}".`;
-      response.relatedProblem = { id: related.id, title: related.title };
-      response.actions.push({
-        type: 'practice_problem',
-        targetId: related.id,
-        title: `Practice "${related.title}"`,
-      });
-    } else {
-      response.actions.push({
-        type: 'open_lesson',
-        targetId: lesson.id,
-        title: `Open "${lesson.title}"`,
-      });
-    }
+  }
+  if (related) {
+    response.relatedProblem = { id: related.id, title: related.title };
   }
   return response;
 }
 
 // ---------------------------------------------------------------------------
-// Hint
+// Hint + solution (Phase 7 Step 4 — HintEngine)
 // ---------------------------------------------------------------------------
 function strategyHint(data: CoachData, request: CoachRequest): CoachResponse {
   const response = emptyResponse('hint');
 
-  // Prefer the current lesson's first problem.
-  const target = currentProblem(data);
+  // Prefer the current lesson's problem; fall back to the first problem.
+  const target = currentProblem(data) ?? data.problems[0] ?? null;
   if (!target) {
-    const any = data.problems[0];
-    if (!any) {
-      response.message = 'There are no problems available to hint on right now.';
-      return response;
-    }
-    return buildHint(response, data, any.id, any.hints, request);
+    response.message = 'There are no problems available to hint on right now.';
+    return response;
   }
-
-  return buildHint(response, data, target.id, target.hints, request);
+  return buildHintResponse(response, data, target, 'hint', request.history ?? []);
 }
 
-function currentProblem(data: CoachData): {
-  id: string;
-  title: string;
-  hints: CoachData['problems'][number]['hints'];
-} | null {
+function strategySolution(data: CoachData, request: CoachRequest): CoachResponse {
+  const response = emptyResponse('solution');
+  const target = currentProblem(data) ?? data.problems[0] ?? null;
+  if (!target) {
+    response.message =
+      "I need to know which problem you're on before I can show a solution. Open a problem, then ask again.";
+    return response;
+  }
+  const built = buildHintResponse(response, data, target, 'solution', request.history ?? []);
+  if (target) {
+    built.relatedProblem = { id: target.id, title: target.title };
+  }
+  return built;
+}
+
+function currentProblem(data: CoachData): Problem | null {
   const lessonId = currentLessonId(data);
   if (lessonId) {
     const inLesson = data.problems.find((p) => p.lessonId === lessonId);
     if (inLesson) {
-      return { id: inLesson.id, title: inLesson.title, hints: inLesson.hints };
+      return inLesson;
     }
   }
   return data.problems[0] ?? null;
 }
 
-function buildHint(
-  response: CoachResponse,
-  data: CoachData,
-  targetId: string,
-  hints: CoachData['problems'][number]['hints'],
-  request: CoachRequest
-): CoachResponse {
-  const progression = nextHintFor(targetId, hints, request.history ?? []);
-
-  if (progression.kind === 'none') {
-    response.message =
-      'I have no hints stored for this item yet, so I can only suggest you reread the lesson and try again.';
-    return response;
-  }
-
-  if (progression.kind === 'hint') {
-    const problem = data.problems.find((p) => p.id === targetId);
-    response.relatedProblem = problem
-      ? { id: problem.id, title: problem.title }
-      : null;
-    response.message = `Here is hint ${progression.index} of ${progression.total} for "${targetTitle(data, targetId)}":\n\n${progression.hint.content}`;
-    response.revealedHintId = progression.hint.id;
-    response.relatedProblem && response.actions.push({
-      type: 'practice_problem',
-      targetId,
-      title: `Try "${targetTitle(data, targetId)}"`,
-    });
-    return response;
-  }
-
-  // All hints shown — move toward the explanation, not the raw answer.
-  const problem = data.problems.find((p) => p.id === targetId);
-  if (problem) {
-    response.relatedProblem = { id: problem.id, title: problem.title };
-    response.message = `You've seen all the hints for "${problem.title}". Here is the explanation to help you understand it:\n\n${problem.explanation}`;
-  } else {
-    response.message =
-      "You've seen all the available hints. Would you like to try tackling it again?";
-  }
-  return response;
+/** The concept whose lesson a problem belongs to (context integration). */
+function conceptForProblem(data: CoachData, problem: Problem): Concept | null {
+  return data.concepts.find((c) => c.lessonId === problem.lessonId) ?? null;
 }
 
-function targetTitle(data: CoachData, targetId: string): string {
-  const p = data.problems.find((x) => x.id === targetId);
-  if (p) {
-    return p.title;
+/** Attempt status for a problem from real progress data. */
+function attemptStatusFor(
+  data: CoachData,
+  problemId: string
+): 'unsolved-failed' | 'solved' | 'not-attempted' {
+  const rec = data.problemPractice.get(problemId);
+  if (!rec) {
+    return 'not-attempted';
   }
-  const c = data.challenges.find((x) => x.id === targetId);
-  return c ? c.title : targetId;
+  if (rec.failed && !rec.solved) {
+    return 'unsolved-failed';
+  }
+  if (rec.solved) {
+    return 'solved';
+  }
+  return 'not-attempted';
+}
+
+function buildHintResponse(
+  response: CoachResponse,
+  data: CoachData,
+  problem: Problem,
+  kind: 'hint' | 'solution',
+  history: readonly ConversationMessageLike[]
+): CoachResponse {
+  const concept = conceptForProblem(data, problem);
+  const lesson = data.lessons.find((l) => l.id === problem.lessonId) ?? null;
+
+  const result = commandHint({
+    target: {
+      id: problem.id,
+      title: problem.title,
+      hints: problem.hints,
+      explanation: problem.explanation,
+    },
+    kind,
+    history,
+    attempt: attemptStatusFor(data, problem.id),
+    concept: concept ? { id: concept.id, name: concept.name, summary: concept.summary } : null,
+    lessonId: lesson?.id ?? null,
+    solved: data.solvedProblemIds.has(problem.id),
+  });
+
+  response.relatedProblem = { id: problem.id, title: problem.title };
+  response.hintLevel = result.hintLevel;
+  response.message = result.message;
+  response.actions = result.actions;
+
+  if (result.kind === 'hint') {
+    response.revealedHintId = result.revealedHintId;
+  }
+  return response;
 }
 
 // ---------------------------------------------------------------------------
@@ -681,31 +695,27 @@ function strategyLessonHelp(data: CoachData): CoachResponse {
 // ---------------------------------------------------------------------------
 function strategyProblemHelp(data: CoachData): CoachResponse {
   const response = emptyResponse('problemHelp');
-  const target = currentProblem(data);
+  const problem = currentProblem(data);
 
-  if (!target) {
+  if (!problem) {
     response.message =
       'I need to know which problem you are on. Open a problem first, then ask for help.';
     return response;
   }
 
-  const problem = data.problems.find((p) => p.id === target.id);
-  if (problem) {
-    response.relatedProblem = { id: problem.id, title: problem.title };
-    const hasHints = problem.hints.length > 0;
-    response.message = `Let me help you with "${problem.title}".\n\n${problem.description}${problem.prompt ? `\n\n${problem.prompt}` : ''}`;
-    if (hasHints) {
-      response.message +=
-        '\n\nSay "give me a hint" and I will walk you through it step by step without giving away the answer.';
-    }
-    response.actions.push({
-      type: 'practice_problem',
-      targetId: problem.id,
-      title: `Work on "${problem.title}"`,
-    });
-  } else {
-    response.message = 'I did not find the current problem. Please select a problem first.';
+  response.relatedProblem = { id: problem.id, title: problem.title };
+  const concept = conceptForProblem(data, problem);
+  const built = buildProblemExplanation({
+    problem,
+    concept: concept ? { id: concept.id, name: concept.name, summary: concept.summary } : null,
+    showPrompt: true,
+  });
+  response.message = built.message;
+  if (problem.hints.length > 0) {
+    response.message +=
+      '\n\nSay "give me a hint" and I will walk you through it step by step without giving away the answer.';
   }
+  response.actions = built.actions;
   return response;
 }
 
@@ -756,6 +766,8 @@ export function buildCoachResponse(
       return strategyExplanation(data, request.message);
     case 'hint':
       return strategyHint(data, request);
+    case 'solution':
+      return strategySolution(data, request);
     case 'help':
       return strategyHelp(data);
     case 'example':
