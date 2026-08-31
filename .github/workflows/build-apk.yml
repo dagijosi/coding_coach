@@ -49,6 +49,9 @@ jobs:
           npm run typecheck
           npm test
 
+      - name: 🏗️ Generate native Android project (expo prebuild)
+        run: npx expo prebuild --platform android --non-interactive
+
       - name: 🐘 Cache Gradle packages
         uses: actions/cache@v4
         with:
@@ -73,7 +76,6 @@ jobs:
           APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
           echo "Found APK at: $APK_PATH"
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          # Copy to convenient name
           cp "$APK_PATH" coding-coach.apk
 
       - name: 📤 Upload APK Artifact
