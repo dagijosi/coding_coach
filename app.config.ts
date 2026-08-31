@@ -1,6 +1,6 @@
 export default {
   expo: {
-    name: 'coding-coach',
+    name: 'Coding Coach',
     slug: 'coding-coach',
     scheme: 'codingcoach',
     version: '1.0.0',
@@ -13,9 +13,8 @@ export default {
     },
     android: {
       adaptiveIcon: {
-        backgroundColor: '#E6F4FE',
-        foregroundImage: './assets/android-icon-foreground.png',
-        backgroundImage: './assets/android-icon-background.png',
+        backgroundColor: '#040E4A',
+        foregroundImage: './assets/icon.png',
         monochromeImage: './assets/android-icon-monochrome.png',
       },
       predictiveBackGestureEnabled: false,
@@ -32,6 +31,28 @@ export default {
     },
     plugins: [
       'expo-router',
+      [
+        'expo-splash-screen',
+        {
+          backgroundColor: '#FDFDFD',
+          image: './assets/splash-light.png',
+          imageWidth: 200,
+          resizeMode: 'cover',
+          dark: {
+            backgroundColor: '#050C27',
+            image: './assets/splash-dark.png',
+          },
+          android: {
+            backgroundColor: '#FDFDFD',
+            image: './assets/icon.png',
+            imageWidth: 1,
+            dark: {
+              backgroundColor: '#050C27',
+              image: './assets/splash-icon.png',
+            },
+          },
+        },
+      ],
       'expo-sqlite',
       'expo-secure-store',
     ],
