@@ -15,9 +15,13 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
 
-const require2 = createRequire(process.cwd() + '/x.mjs');
-const REPO = process.cwd();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const REPO = resolve(__dirname, '../..');
+const require2 = createRequire(import.meta.url);
 
 let passed = 0;
 let failed = 0;
@@ -38,9 +42,10 @@ function assert(cond, label, detail = '') {
 }
 
 function transpile(relPath) {
-  const abs = REPO + '\\' + relPath;
+  const parts = relPath.split(/[/\\]/);
+  const abs = join(REPO, ...parts);
   const src = fs.readFileSync(abs, 'utf8');
-  const ts = require2(REPO + '\\node_modules\\typescript');
+  const ts = require2('typescript');
   return {
     abs,
     out: ts.transpileModule(src, {

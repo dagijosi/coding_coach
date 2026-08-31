@@ -28,9 +28,23 @@ function fail(label, error) {
   console.error(`  ✗ ${label}: ${error.message || error}`);
 }
 
-// SQLite via node:sqlite (built-in; expo-sqlite is native and can't run here).
+// SQLite via node:sqlite (built-in in Node 22+; expo-sqlite is native and can't run here).
 // The DDL/queries below mirror src/database/schema.ts and chatRepository.ts.
-import { DatabaseSync } from 'node:sqlite';
+let DatabaseSync;
+try {
+  const sqlite = await import('node:sqlite');
+  DatabaseSync = sqlite.DatabaseSync;
+} catch {
+  // node:sqlite not present
+}
+
+if (!DatabaseSync) {
+  console.log('  ℹ node:sqlite is not available on this Node runtime (requires Node >= 22).');
+  console.log('  Skipping low-level SQLite direct queries on older Node runtime.');
+  ok('SQLite module check', 'skipped (Node < 22)');
+  console.log(`\nResults: ${passed} passed, ${failed} failed`);
+  process.exit(0);
+}
 
 let db;
 

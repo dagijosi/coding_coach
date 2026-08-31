@@ -9,16 +9,21 @@
 import * as assertModule from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
 import vm from 'node:vm';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const REPO = resolve(__dirname, '../..');
 const require = createRequire(import.meta.url);
-const REPO = 'D:\\Projects\\Personal\\pp\\coding-coach';
 const assert = assertModule.strict ?? assertModule;
 
 function transpile(relPath) {
-  const abs = `${REPO}\\${relPath}`;
+  const parts = relPath.split(/[/\\]/);
+  const abs = join(REPO, ...parts);
   const src = readFileSync(abs, 'utf8');
-  const ts = require(`${REPO}\\node_modules\\typescript`);
+  const ts = require('typescript');
   const out = ts.transpileModule(src, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
