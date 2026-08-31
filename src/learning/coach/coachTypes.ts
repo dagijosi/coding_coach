@@ -11,6 +11,7 @@ import type { Lesson, Problem, Challenge, Concept } from '@/types/learning';
 import type { ProgressSummary } from '@/types/progress';
 import type { TopicMastery } from '@/learning/mastery/masteryTypes';
 import type { WeakArea } from '@/learning/weakareas/weakAreaTypes';
+import type { LearningContext } from './learningContextTypes';
 
 export type CoachIntent =
   | 'greeting'
@@ -28,6 +29,7 @@ export type CoachIntent =
 
 export type SuggestedActionType =
   | 'open_lesson'
+  | 'continue_lesson'
   | 'practice_problem'
   | 'try_challenge'
   | 'review_concept'
@@ -83,16 +85,13 @@ export type ConversationMessageLike = {
 };
 
 /**
- * Every piece of data the engine needs, loaded by the service from the
+ * Every piece of data the engine needs, loaded by the builder/service from the
  * existing repositories. The engine is React/DB-free: it only reads this map
- * and the learner's current context.
+ * plus the learner's current context snapshot.
  */
 export type CoachData = {
-  context: {
-    currentLessonId: string;
-    currentLessonTitle: string;
-    topicName: string;
-  } | null;
+  /** The current learner context snapshot (location + mastery + progress). */
+  context: LearningContext;
   concepts: Concept[];
   lessons: Lesson[];
   problems: Problem[];

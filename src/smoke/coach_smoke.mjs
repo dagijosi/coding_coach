@@ -125,25 +125,42 @@ const CHALLENGE_PRINT = {
   explanation: 'Declare a variable and print it.',
 };
 
-function makeData(overrides = {}) {
-  const base = {
-    context: {
-      currentLessonId: 'lesson-variables',
-      currentLessonTitle: 'Variables',
-      topicName: 'Fundamentals',
+function makeContext(overrides = {}, progress = {}) {
+  return Object.assign({
+    location: {
+      course: { id: 'course-js', name: 'JavaScript' },
+      topic: { id: 'topic-fundamentals', name: 'Fundamentals' },
+      lesson: { id: 'lesson-variables', title: 'Variables' },
+      concept: { id: 'concept-variable', name: 'What is a variable?' },
     },
-    concepts: [CONCEPT_VARIABLE, CONCEPT_LET_CONST],
-    lessons: [LESSON_VARIABLES, LESSON_FUNCTIONS],
-    problems: [PROBLEM_PRINT, PROBLEM_BUG],
-    challenges: [CHALLENGE_PRINT],
-    progressSummary: {
+    recentProblems: [],
+    recentCompletedLessons: [],
+    topicMastery: [],
+    weakAreas: [],
+    conceptsNeedingReview: [],
+    progress: Object.assign({
       totalLessons: 2, completedLessons: 0, inProgressLessons: 1,
       totalProblems: 2, solvedProblems: 0, totalChallenges: 1,
       completedChallenges: 0, totalAttempts: 0, successfulAttempts: 0,
       successRate: 0, totalXP: 0, currentStreak: 0, longestStreak: 0,
-    },
-    topicMastery: [],
-    weakAreas: [],
+    }, progress),
+    currentLessonStatus: 'in-progress',
+  }, overrides);
+}
+
+const DEFAULT_PROGRESS = makeContext().progress;
+
+function makeData(overrides = {}) {
+  const ctx = overrides.context === undefined ? makeContext() : overrides.context;
+  const base = {
+    context: ctx,
+    concepts: [CONCEPT_VARIABLE, CONCEPT_LET_CONST],
+    lessons: [LESSON_VARIABLES, LESSON_FUNCTIONS],
+    problems: [PROBLEM_PRINT, PROBLEM_BUG],
+    challenges: [CHALLENGE_PRINT],
+    progressSummary: overrides.progressSummary === undefined ? DEFAULT_PROGRESS : overrides.progressSummary,
+    topicMastery: ctx.topicMastery,
+    weakAreas: ctx.weakAreas,
     solvedProblemIds: new Set(),
     completedChallengeIds: new Set(),
   };
@@ -292,7 +309,10 @@ ok('missing definition no hallucinated fact', !missingDef.message.includes('quar
 // ---- 10. Missing problem (no current lesson / no problems) ----
 console.log('  Missing problem');
 const noProbs = engine.buildCoachResponse(
-  makeData({ context: null, problems: [] }),
+  makeData({
+    context: makeContext({ location: { course: null, topic: null, lesson: null, concept: null }, currentLessonStatus: null }),
+    problems: [],
+  }),
   req('give me a hint')
 );
 ok('hint with no problems returns fallback', /no problems/i.test(noProbs.message));

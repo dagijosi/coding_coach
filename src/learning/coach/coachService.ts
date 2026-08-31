@@ -16,11 +16,9 @@ import { getLessons } from '@/repositories/lessonRepository';
 import { getProblems } from '@/repositories/problemRepository';
 import {
   getCompletedChallengeIds,
-  getProgressSummary,
   getSolvedProblemIds,
-  getTopicMastery,
 } from '@/repositories/progressRepository';
-import { getWeakAreas } from '@/learning/weakareas/weakAreaService';
+import { buildLearningContext } from '@/services/learningContextBuilder';
 
 import { buildCoachResponse } from './coachEngine';
 import type {
@@ -58,45 +56,33 @@ export type { PracticeSelection } from './practiceSelection';
 
 /**
  * Converts the Step 1 AssistantContext into the pure engine's CoachData by
- * loading the remaining content/evidence it needs through the repositories.
+ * loading the remaining content/evidence it needs through the repositories and
+ * building the current LearningContext snapshot (Phase 7 Step 3).
  */
 export async function loadCoachData(
   context: AssistantContext,
   now = new Date()
 ): Promise<CoachData> {
-  const [
-    concepts,
-    lessons,
-    problems,
-    challenges,
-    solvedProblemIds,
-    completedChallengeIds,
-    topicMastery,
-  ] = await Promise.all([
-    getConcepts(),
-    getLessons(),
-    getProblems(),
-    getChallenges(),
-    getSolvedProblemIds(),
-    getCompletedChallengeIds(),
-    getTopicMastery(now),
-  ]);
+  const [learningContext, concepts, lessons, problems, challenges, solvedProblemIds, completedChallengeIds] =
+    await Promise.all([
+      buildLearningContext(context.currentLessonId || null, now),
+      getConcepts(),
+      getLessons(),
+      getProblems(),
+      getChallenges(),
+      getSolvedProblemIds(),
+      getCompletedChallengeIds(),
+    ]);
 
   return {
-    context: context.currentLessonId
-      ? {
-          currentLessonId: context.currentLessonId,
-          currentLessonTitle: context.currentLessonTitle,
-          topicName: context.topicName,
-        }
-      : null,
+    context: learningContext,
     concepts,
     lessons,
     problems,
     challenges,
-    progressSummary: context.progressSummary,
-    topicMastery,
-    weakAreas: context.weakAreas,
+    progressSummary: learningContext.progress,
+    topicMastery: learningContext.topicMastery,
+    weakAreas: learningContext.weakAreas,
     solvedProblemIds: new Set(solvedProblemIds),
     completedChallengeIds: new Set(completedChallengeIds),
   };

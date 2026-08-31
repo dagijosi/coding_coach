@@ -46,10 +46,110 @@ function emptyResponse(intent: CoachIntent): CoachResponse {
 
 function baseMessage(data: CoachData): string {
   const c = data.context;
-  if (c) {
-    return `I can help with "${c.currentLessonTitle}"${c.topicName ? ` in ${c.topicName}` : ''}. `;
+  const lessonTitle = c.location.lesson?.title;
+  const topicName = c.location.topic?.name;
+  if (lessonTitle) {
+    return `I can help with "${lessonTitle}"${topicName ? ` in ${topicName}` : ''}. `;
   }
   return 'I can help with the topics and lessons in Coding Coach. ';
+}
+
+/** Current lesson id from the learner's snapshot (null-safe). */
+function currentLessonId(data: CoachData): string | null {
+  return data.context.location.lesson?.id ?? null;
+}
+
+/** Current concept resolved via the context priority (explicit > current). */
+function currentConcept(data: CoachData): Concept | null {
+  const conceptRef = data.context.location.concept;
+  if (!conceptRef) {
+    return null;
+  }
+  return data.concepts.find((c) => c.id === conceptRef.id) ?? null;
+}
+
+/**
+ * Returns a one-line personalization note about the learner's most recent
+ * problem attempt in the current lesson, backed by real attempt data. Only
+ * speaks when the snapshot actually has a matching record — no fabricated
+ * praise or blame.
+ */
+function recentProblemNote(data: CoachData, targetProblemId: string): string {
+  const lessonId = currentLessonId(data);
+  const recent = data.context.recentProblems
+    .filter((r) => !lessonId || data.problems.find((p) => p.id === r.problemId && p.lessonId === lessonId))
+    .sort((a, b) => (a.attemptedAt < b.attemptedAt ? -1 : a.attemptedAt > b.attemptedAt ? 1 : 0));
+  const last = recent.length > 0 ? recent[recent.length - 1] : null;
+  if (!last) {
+    return '';
+  }
+  if (!last.success) {
+    return `You didn't get the last one — let's try again with this.\n\n`;
+  }
+  if (targetProblemId === last.problemId && !data.solvedProblemIds.has(last.problemId)) {
+    return `Nice work on "${last.title}"! Here's another.\n\n`;
+  }
+  return `Nice work on that last problem. Keep it up!\n\n`;
+}
+
+/**
+ * Appends one context-aware suggested action derived from the learner's
+ * snapshot (Section 11). Priority:
+ *   1. a weak concept in the current lesson -> review_concept
+ *   2. an unfinished lesson -> continue_lesson
+ *   3. completed concept + weak problem performance -> practice_problem
+ *   4. a strong concept -> try_challenge
+ * Only pushes an action it can support with real context data; returns whether
+ * one was added.
+ */
+function appendContextAction(data: CoachData, response: CoachResponse): boolean {
+  const ctx = data.context;
+
+  // 1. Weak concept (from real mastery data).
+  if (ctx.conceptsNeedingReview.length > 0) {
+    const first = ctx.conceptsNeedingReview[0];
+    response.actions.push({
+      type: 'review_concept',
+      targetId: first.conceptId,
+      title: `Review "${first.conceptName}"`,
+    });
+    return true;
+  }
+
+  // 2. Current lesson not yet completed -> continue it.
+  const lessonId = currentLessonId(data);
+  const ls = ctx.currentLessonStatus;
+  if (lessonId && ls !== 'completed') {
+    response.actions.push({
+      type: 'continue_lesson',
+      targetId: lessonId,
+      title:
+        ls === 'in-progress'
+          ? 'Continue your current lesson'
+          : 'Start your current lesson',
+    });
+    return true;
+  }
+
+  // 3. A strong concept -> suggest a challenge.
+  const strong = ctx.topicMastery.find((t) => t.level === 'mastered');
+  if (strong) {
+    const lesson = data.lessons.find((l) => l.topicId === strong.topicId);
+    if (lesson) {
+      const challenge = data.challenges.find(
+        (c) => c.lessonId === lesson.id && !data.completedChallengeIds.has(c.id)
+      );
+      if (challenge) {
+        response.actions.push({
+          type: 'try_challenge',
+          targetId: challenge.id,
+          title: `Try the "${challenge.title}" challenge`,
+        });
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,6 +158,7 @@ function baseMessage(data: CoachData): string {
 function strategyGreeting(data: CoachData): CoachResponse {
   const response = emptyResponse('greeting');
   response.message = `Hello! ${baseMessage(data)}Ask me to "explain a concept", "give me a hint", "give me a practice question", or "how am I doing?"`;
+  appendContextAction(data, response);
   return response;
 }
 
@@ -155,7 +256,15 @@ function strategyExplanation(
       });
       return response;
     }
-    response.message = `I can't explain "${topic || query}" because it isn't in Coding Coach yet. Try asking about a topic you've seen, like the concepts in your current lesson.`;
+    // Nothing explicit matched — fall back to the learner's current context.
+    const current = currentConcept(data);
+    if (current) {
+      return explainConcept(data, current, current.name);
+    }
+    const curLessonTitle = data.context.location.lesson?.title;
+    response.message = curLessonTitle
+      ? `I can't explain "${topic || query}" specifically, but we're in "${curLessonTitle}" — try asking about one of its concepts, like "${curLessonTitle}".`
+      : `I can't explain "${topic || query}" because it isn't in Coding Coach yet. Try asking about a topic you've seen, like the concepts in your current lesson.`;
     return response;
   }
 
@@ -248,14 +357,12 @@ function currentProblem(data: CoachData): {
   title: string;
   hints: CoachData['problems'][number]['hints'];
 } | null {
-  if (!data.context || !data.context.currentLessonId) {
-    return null;
-  }
-  const inLesson = data.problems.find(
-    (p) => p.lessonId === data.context!.currentLessonId
-  );
-  if (inLesson) {
-    return { id: inLesson.id, title: inLesson.title, hints: inLesson.hints };
+  const lessonId = currentLessonId(data);
+  if (lessonId) {
+    const inLesson = data.problems.find((p) => p.lessonId === lessonId);
+    if (inLesson) {
+      return { id: inLesson.id, title: inLesson.title, hints: inLesson.hints };
+    }
   }
   return data.problems[0] ?? null;
 }
@@ -325,7 +432,9 @@ function strategyHelp(data: CoachData): CoachResponse {
 // ---------------------------------------------------------------------------
 function strategyExample(data: CoachData): CoachResponse {
   const response = emptyResponse('example');
-  const problem = data.problems[0];
+  const problem =
+    data.problems.find((p) => p.lessonId === currentLessonId(data)) ??
+    data.problems[0];
   if (problem) {
     response.relatedProblem = { id: problem.id, title: problem.title };
     response.message = `Here is an example:\n\n"${problem.title}"\n${problem.description}\n${problem.prompt ?? ''}`.trim();
@@ -349,7 +458,7 @@ function strategyPractice(data: CoachData): CoachResponse {
     lessons: data.lessons,
     problems: data.problems,
     challenges: data.challenges,
-    currentLessonId: data.context?.currentLessonId ?? '',
+    currentLessonId: currentLessonId(data) ?? '',
     solvedProblemIds: data.solvedProblemIds,
     completedChallengeIds: data.completedChallengeIds,
     weakAreas: data.weakAreas,
@@ -365,7 +474,8 @@ function strategyPractice(data: CoachData): CoachResponse {
       id: selection.problem.id,
       title: selection.problem.title,
     };
-    response.message = `${selection.reason}\n\n${selection.problem.description}${selection.problem.prompt ? `\n${selection.problem.prompt}` : ''}`.trim();
+    const opening = recentProblemNote(data, selection.problem.id);
+    response.message = `${opening}${selection.reason}\n\n${selection.problem.description}${selection.problem.prompt ? `\n${selection.problem.prompt}` : ''}`.trim();
     response.actions.push({
       type: 'practice_problem',
       targetId: selection.problem.id,
@@ -425,12 +535,18 @@ function strategyProgress(data: CoachData): CoachResponse {
       lines.push(`You are on a ${p.currentStreak}-day streak`);
     }
     response.message = `Here is your progress so far:\n\n${lines.map((l) => `- ${l}`).join('\n')}`;
+    // Personalize with an honest note when a strong topic exists.
+    const strong = data.topicMastery.find((t) => t.level === 'mastered');
+    if (strong) {
+      response.message += `\n\nYou are doing well with "${strong.topicName}" — keep it up!`;
+    }
   }
   response.actions.push({
     type: 'view_progress',
     targetId: 'progress',
     title: 'View your progress',
   });
+  appendContextAction(data, response);
   return response;
 }
 
@@ -439,9 +555,25 @@ function strategyProgress(data: CoachData): CoachResponse {
 // ---------------------------------------------------------------------------
 function strategyWeakArea(data: CoachData): CoachResponse {
   const response = emptyResponse('weakArea');
+  const conceptReview =
+    data.context.conceptsNeedingReview.length > 0
+      ? data.context.conceptsNeedingReview[0]
+      : null;
+
+  // A weak concept from real mastery data is worth surfacing even when no
+  // topic-level weak area has been detected yet.
   if (data.weakAreas.length === 0) {
-    response.message =
-      'Based on your work so far, I have not identified a weak area yet. Keep practicing and I will help you focus where needed.';
+    if (conceptReview) {
+      response.message = `Your mastery of "${conceptReview.conceptName}" (${conceptReview.masteryScore}%) is below the review threshold — worth revisiting.`;
+      response.actions.push({
+        type: 'review_concept',
+        targetId: conceptReview.conceptId,
+        title: `Review "${conceptReview.conceptName}"`,
+      });
+    } else {
+      response.message =
+        'Based on your work so far, I have not identified a weak area yet. Keep practicing and I will help you focus where needed.';
+    }
     response.actions.push({
       type: 'view_progress',
       targetId: 'progress',
@@ -458,7 +590,7 @@ function strategyWeakArea(data: CoachData): CoachResponse {
     lessons: data.lessons,
     problems: data.problems,
     challenges: data.challenges,
-    currentLessonId: data.context?.currentLessonId ?? '',
+    currentLessonId: currentLessonId(data) ?? '',
     solvedProblemIds: data.solvedProblemIds,
     completedChallengeIds: data.completedChallengeIds,
     weakAreas: [first],
@@ -491,6 +623,21 @@ function strategyWeakArea(data: CoachData): CoachResponse {
   if (header !== first.targetName && header) {
     response.message += `\n\n(Related topic: ${header})`;
   }
+
+  // Context-aware personalization: a weak concept from the snapshot warrants a
+  // "review this concept" suggestion, backed by real mastery data.
+  const conceptReviewNote =
+    data.context.conceptsNeedingReview.length > 0
+      ? data.context.conceptsNeedingReview[0]
+      : null;
+  if (conceptReviewNote) {
+    response.message += `\n\nYour mastery of "${conceptReviewNote.conceptName}" is ${conceptReviewNote.masteryScore}% — worth revisiting.`;
+    response.actions.push({
+      type: 'review_concept',
+      targetId: conceptReviewNote.conceptId,
+      title: `Review "${conceptReviewNote.conceptName}"`,
+    });
+  }
   return response;
 }
 
@@ -499,9 +646,10 @@ function strategyWeakArea(data: CoachData): CoachResponse {
 // ---------------------------------------------------------------------------
 function strategyLessonHelp(data: CoachData): CoachResponse {
   const response = emptyResponse('lessonHelp');
-  const c = data.context;
-  if (c && c.currentLessonId) {
-    const lesson = data.lessons.find((l) => l.id === c.currentLessonId);
+  const lessonRef = data.context.location.lesson;
+  const topicName = data.context.location.topic?.name;
+  if (lessonRef) {
+    const lesson = data.lessons.find((l) => l.id === lessonRef.id);
     // Build an explanation-style summary from the lesson's content.
     const textBlocks = lesson
       ? lesson.content
@@ -512,14 +660,14 @@ function strategyLessonHelp(data: CoachData): CoachResponse {
       ? { id: lesson.id, title: lesson.title }
       : null;
     if (lesson) {
-      response.message = `Here is some help with "${c.currentLessonTitle}" (${c.topicName}):\n\n${textBlocks.join(' ') || lesson.description}`;
+      response.message = `Here is some help with "${lessonRef.title}"${topicName ? ` (${topicName})` : ''}:\n\n${textBlocks.join(' ') || lesson.description}`;
       response.actions.push({
         type: 'open_lesson',
         targetId: lesson.id,
         title: `Open "${lesson.title}"`,
       });
     } else {
-      response.message = `We are in "${c.currentLessonTitle}" but I don't have its content details right now.`;
+      response.message = `We are in "${lessonRef.title}" but I don't have its content details right now.`;
     }
   } else {
     response.message =
