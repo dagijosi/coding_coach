@@ -40,7 +40,6 @@ import type { UserProgress } from '@/types/progress';
 import { pickDailyItem } from '@/utils/dailyChallenge';
 
 import {
-  colors,
   radius,
   spacing,
   useTheme,
@@ -51,6 +50,7 @@ import {
 type IconName = keyof typeof Ionicons.glyphMap;
 
 export default function HomeScreen() {
+  const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
   const [lesson, setLesson] = useState<Lesson | null>(null);
