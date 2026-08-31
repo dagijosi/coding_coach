@@ -1,11 +1,11 @@
 // ---------------------------------------------------------------------------
 // Coach Screen (Phase 7 Step 6) — the chat UI.
 //
-// A polished, native-feeling chat experience over the existing offline
-// CoachResponseEngine. This screen is purely presentational: every coaching
-// decision (hints, explanations, context, actions) comes from useCoachChat,
-// which delegates to the existing services. No SQL, no mastery math, no weak
-// areas, no problem selection live here (§20).
+// Fixes applied:
+//   § Input visible above floating dock — uses dockClearance() so the input
+//     bar never hides behind the FloatingDock overlay.
+//   § Context-aware quick-action chips — built dynamically from currentLesson
+//     so suggestions say "Explain closures" not just "Give me a hint".
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -39,30 +39,84 @@ import { CoachMessageBubble } from '@/features/coach/CoachMessageBubble';
 import { CoachInputBar } from '@/features/coach/CoachInputBar';
 import { CoachTypingIndicator } from '@/features/coach/CoachTypingIndicator';
 import { CoachContextChip } from '@/features/coach/CoachContextChip';
-import { CoachActionChips } from '@/features/coach/CoachActionChips';
+import { CoachActionChips, type QuickActionItem } from '@/features/coach/CoachActionChips';
+import {
+  DOCK_BOTTOM_OFFSET,
+  DOCK_HEIGHT,
+  dockClearance,
+} from '@/components/navigation/FloatingDock';
 
-const QUICK_ACTIONS = [
-  {
-    icon: 'bulb-outline' as const,
-    label: 'Give me a hint',
-    prompt: 'Give me a hint',
-  },
-  {
-    icon: 'code-slash-outline' as const,
-    label: 'Practice',
-    prompt: 'What should I practice?',
-  },
-  {
-    icon: 'trending-up-outline' as const,
-    label: 'My progress',
-    prompt: 'How am I doing?',
-  },
-  {
-    icon: 'layers-outline' as const,
-    label: 'Review concepts',
-    prompt: 'Which concepts should I review?',
-  },
-];
+// ---------------------------------------------------------------------------
+// Build context-aware quick actions from the current lesson.
+// If no lesson is active, fall back to generic onboarding prompts.
+// ---------------------------------------------------------------------------
+function buildQuickActions(lesson: { title?: string; language?: string } | null | undefined): QuickActionItem[] {
+  if (lesson?.title) {
+    const t = lesson.title;
+    const lang = lesson.language ?? 'this topic';
+    return [
+      {
+        icon: 'bulb-outline' as const,
+        label: `Explain ${t}`,
+        prompt: `Can you explain "${t}" to me in simple terms?`,
+      },
+      {
+        icon: 'help-circle-outline' as const,
+        label: 'Give me a hint',
+        prompt: `I'm studying "${t}". Give me a hint to help me understand it better.`,
+      },
+      {
+        icon: 'code-slash-outline' as const,
+        label: `Practice ${t}`,
+        prompt: `Give me a practice exercise for "${t}" in ${lang}.`,
+      },
+      {
+        icon: 'trending-up-outline' as const,
+        label: 'My progress',
+        prompt: `How am I doing in ${lang}? What should I focus on next?`,
+      },
+      {
+        icon: 'layers-outline' as const,
+        label: 'Key concepts',
+        prompt: `What are the key concepts I need to understand in "${t}"?`,
+      },
+      {
+        icon: 'warning-outline' as const,
+        label: 'Common mistakes',
+        prompt: `What are common mistakes beginners make when learning "${t}" in ${lang}?`,
+      },
+    ];
+  }
+
+  // No active lesson — generic helpful starters
+  return [
+    {
+      icon: 'rocket-outline' as const,
+      label: 'Where to start',
+      prompt: 'I\'m new here. Where should I start learning?',
+    },
+    {
+      icon: 'code-slash-outline' as const,
+      label: 'Pick a challenge',
+      prompt: 'Give me a coding challenge that suits my current level.',
+    },
+    {
+      icon: 'trending-up-outline' as const,
+      label: 'My progress',
+      prompt: 'How am I doing? What should I focus on?',
+    },
+    {
+      icon: 'layers-outline' as const,
+      label: 'Review concepts',
+      prompt: 'Which concepts should I review or strengthen?',
+    },
+    {
+      icon: 'language-outline' as const,
+      label: 'Compare languages',
+      prompt: 'What\'s the difference between JavaScript, Python, and TypeScript?',
+    },
+  ];
+}
 
 export default function CoachScreen() {
   const { colors } = useTheme();
@@ -70,7 +124,6 @@ export default function CoachScreen() {
   const insets = useSafeAreaInsets();
 
   const [input, setInput] = useState('');
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const listRef = useRef<FlatList>(null);
   const nearBottomRef = useRef(true);
   const inputRef = useRef<TextInput>(null);
@@ -91,6 +144,9 @@ export default function CoachScreen() {
   } = useCoachChat({
     onAction: handleSuggestedAction,
   });
+
+  // Dynamic quick actions based on what lesson the user is currently studying
+  const quickActions = useMemo(() => buildQuickActions(currentLesson), [currentLesson]);
 
   function handleSuggestedAction(action: {
     type: string;
@@ -126,22 +182,6 @@ export default function CoachScreen() {
     }
   }
 
-  // Keyboard listeners to keep the input visible (§13).
-  useEffect(() => {
-    const show = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => setKeyboardHeight(e.endCoordinates.height)
-    );
-    const hide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setKeyboardHeight(0)
-    );
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-
   const onScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
@@ -171,7 +211,6 @@ export default function CoachScreen() {
       setInput('');
       const ok = await send(text);
       if (!ok) {
-        // Keep the input text so the learner can retry without retyping.
         setInput(text);
       }
     },
@@ -183,11 +222,13 @@ export default function CoachScreen() {
     setInput('');
   }, [clearConversation]);
 
-  const footerInset = keyboardHeight > 0 ? 0 : insets.bottom;
+  // The floating dock sits above the bottom safe area.
+  // We must add full dock clearance so the input bar is never hidden behind it.
+  const dockBottom = dockClearance(insets.bottom);
 
   if (loading) {
     return (
-      <ChatRoot padTop={insets.top} padBottom={footerInset}>
+      <ChatRoot padTop={insets.top} dockBottom={dockBottom}>
         <CoachHeader
           onClear={handleClear}
           hasMessages={false}
@@ -204,7 +245,7 @@ export default function CoachScreen() {
 
   if (loadError) {
     return (
-      <ChatRoot padTop={insets.top} padBottom={footerInset}>
+      <ChatRoot padTop={insets.top} dockBottom={dockBottom}>
         <CoachHeader onClear={handleClear} hasMessages={messages.length > 0} />
         <View style={styles.center}>
           <Ionicons
@@ -235,10 +276,10 @@ export default function CoachScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.keyboard}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={0}
     >
-      <ChatRoot padTop={insets.top} padBottom={footerInset}>
+      <ChatRoot padTop={insets.top} dockBottom={dockBottom}>
         <CoachHeader
           onClear={handleClear}
           hasMessages={messages.length > 0}
@@ -247,7 +288,10 @@ export default function CoachScreen() {
         <CoachContextChip lesson={currentLesson} />
 
         {isEmpty ? (
-          <CoachEmptyState onQuick={runQuickAction} />
+          <CoachEmptyState
+            onQuick={runQuickAction}
+            quickActions={quickActions}
+          />
         ) : (
           <FlatList
             ref={listRef}
@@ -297,6 +341,7 @@ export default function CoachScreen() {
           />
         )}
 
+        {/* Input bar sits above the floating dock */}
         <CoachInputBar
           ref={inputRef}
           value={input}
@@ -308,6 +353,10 @@ export default function CoachScreen() {
     </KeyboardAvoidingView>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
 
 function MessageRow({
   item,
@@ -371,7 +420,13 @@ function CoachHeader({
   );
 }
 
-function CoachEmptyState({ onQuick }: { onQuick: (prompt: string) => void }) {
+function CoachEmptyState({
+  onQuick,
+  quickActions,
+}: {
+  onQuick: (prompt: string) => void;
+  quickActions: QuickActionItem[];
+}) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
@@ -384,11 +439,11 @@ function CoachEmptyState({ onQuick }: { onQuick: (prompt: string) => void }) {
         How can I help you learn today?
       </AppText>
       <AppText variant="bodySmall" muted style={styles.emptySub}>
-        Ask about a concept, get a hint, or decide what to practice next.
+        Ask anything about what you're studying, or tap a suggestion below.
       </AppText>
       <CoachActionChips
         variant="quick"
-        items={QUICK_ACTIONS}
+        items={quickActions}
         onQuick={onQuick}
       />
     </View>
@@ -398,19 +453,25 @@ function CoachEmptyState({ onQuick }: { onQuick: (prompt: string) => void }) {
 function ChatRoot({
   children,
   padTop,
-  padBottom,
+  dockBottom,
 }: {
   children: React.ReactNode;
   padTop: number;
-  padBottom: number;
+  dockBottom: number;
 }) {
   const styles = useThemedStyles(makeStyles);
   return (
-    <View style={[styles.root, { paddingTop: padTop + spacing.sm, paddingBottom: padBottom }]}>
+    // paddingBottom reserves space above the floating dock so the input bar
+    // and last message are never hidden underneath it.
+    <View style={[styles.root, { paddingTop: padTop + spacing.sm, paddingBottom: dockBottom }]}>
       {children}
     </View>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({

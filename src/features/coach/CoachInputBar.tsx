@@ -129,6 +129,7 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing.sm,
       paddingHorizontal: spacing.md,
       paddingTop: spacing.sm,
+      paddingBottom: spacing.sm,
       backgroundColor: colors.surface.primary,
       borderTopWidth: 1,
       borderTopColor: colors.border.default,
