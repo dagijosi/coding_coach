@@ -16,7 +16,7 @@
  * `PRAGMA user_version` and applies pending migrations to bring an install up
  * to date without destroying user progress.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const SCHEMA_TABLES: string[] = [
   'app_meta',
@@ -34,6 +34,11 @@ export const SCHEMA_TABLES: string[] = [
   'user_progress',
   'conversations',
   'conversation_messages',
+  'github_account',
+  'github_repositories',
+  'github_commits',
+  'github_releases',
+  'github_sync_state',
 ];
 
 /**
@@ -193,5 +198,84 @@ export const SCHEMA_SQL = `
     created_at TEXT NOT NULL,
     FOREIGN KEY (conversation_id) REFERENCES conversations(id)
       ON DELETE CASCADE
+  );
+
+  -- ---------------------- GitHub (Phase 8) ----------------------
+  -- Offline-first cache of the learner's GitHub activity. OAuth credentials
+  -- are NEVER stored here — only public activity, kept available offline.
+  --
+  -- github_account: single row (id = 1) describing the connected identity.
+  CREATE TABLE IF NOT EXISTS github_account (
+    id INTEGER PRIMARY KEY NOT NULL,
+    login TEXT NOT NULL,
+    name TEXT,
+    node_id TEXT NOT NULL,
+    avatar_url TEXT,
+    scopes TEXT NOT NULL,
+    connected_at TEXT NOT NULL,
+    last_sync_at TEXT
+  );
+
+  -- github_repositories: repositories the learner chooses to track.
+  CREATE TABLE IF NOT EXISTS github_repositories (
+    id TEXT PRIMARY KEY NOT NULL,
+    owner TEXT NOT NULL,
+    name TEXT NOT NULL,
+    full_name TEXT NOT NULL UNIQUE,
+    node_id TEXT NOT NULL,
+    description TEXT,
+    language TEXT,
+    stars INTEGER NOT NULL DEFAULT 0,
+    forks INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT,
+    pushed_at TEXT,
+    default_branch TEXT,
+    url TEXT NOT NULL,
+    selected INTEGER NOT NULL DEFAULT 1,
+    synced_at TEXT
+  );
+
+  -- github_commits: cached commits per tracked repository (primary key = sha,
+  -- scoped by repo so identical SHAs across forks do not collide).
+  CREATE TABLE IF NOT EXISTS github_commits (
+    id TEXT PRIMARY KEY NOT NULL,
+    repo_id TEXT NOT NULL,
+    sha TEXT NOT NULL,
+    message TEXT NOT NULL,
+    author_name TEXT,
+    author_email TEXT,
+    author_date TEXT,
+    url TEXT NOT NULL,
+    synced_at TEXT NOT NULL,
+    FOREIGN KEY (repo_id) REFERENCES github_repositories(id)
+      ON DELETE CASCADE
+  );
+
+  -- github_releases: cached releases per tracked repository.
+  CREATE TABLE IF NOT EXISTS github_releases (
+    id TEXT PRIMARY KEY NOT NULL,
+    repo_id TEXT NOT NULL,
+    tag_name TEXT NOT NULL,
+    name TEXT,
+    body TEXT,
+    published_at TEXT,
+    url TEXT NOT NULL,
+    synced_at TEXT NOT NULL,
+    FOREIGN KEY (repo_id) REFERENCES github_repositories(id)
+      ON DELETE CASCADE
+  );
+
+  -- github_sync_state: single row (id = 1) with sync + rate-limit bookkeeping.
+  CREATE TABLE IF NOT EXISTS github_sync_state (
+    id INTEGER PRIMARY KEY NOT NULL,
+    last_sync_at TEXT,
+    last_error_kind TEXT,
+    last_error_message TEXT,
+    last_error_retryable INTEGER,
+    last_error_rate_limit_reset_at INTEGER,
+    last_synced_count INTEGER NOT NULL DEFAULT 0,
+    rate_limit_reset_at INTEGER,
+    rate_limit_remaining INTEGER,
+    syncing INTEGER NOT NULL DEFAULT 0
   );
 `;

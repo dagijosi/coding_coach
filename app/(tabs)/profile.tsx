@@ -527,8 +527,30 @@ export default function ProgressScreen() {
       <View style={styles.section}>
         <SectionHeader title="Settings" icon="settings-outline" />
         <AppearanceSettings />
+        <GitHubSettings />
       </View>
     </TabScreen>
+  );
+}
+
+function GitHubSettings() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <Card onPress={() => router.push('/github')}>
+      <View style={[styles.githubRow, { borderColor: colors.border.default }]}>
+        <View style={styles.githubIcon}>
+          <Ionicons name="logo-github" size={22} color={colors.accent.primary} />
+        </View>
+        <View style={styles.flex}>
+          <AppText variant="h3">GitHub</AppText>
+          <AppText variant="caption" muted>
+            Connect, sync &amp; browse your activity offline
+          </AppText>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colors.text.muted} />
+      </View>
+    </Card>
   );
 }
 
@@ -786,6 +808,23 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       gap: spacing.md,
       paddingVertical: spacing.sm,
+    },
+
+    githubRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      borderTopWidth: 1,
+      paddingTop: spacing.md,
+    },
+
+    githubIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: radius.md,
+      backgroundColor: hexWithAlpha(colors.accent.primary, 0.12),
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
 

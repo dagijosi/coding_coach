@@ -118,6 +118,9 @@ export default function CoachScreen() {
       case 'view_progress':
         router.push('/profile');
         break;
+      case 'open_github':
+        router.push('/github');
+        break;
       default:
         break;
     }

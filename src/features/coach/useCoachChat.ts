@@ -36,6 +36,7 @@ import {
   enginePromptForAction,
   stripHintMarker,
 } from './chatContent';
+import { buildGithubCoachResponse } from '@/features/github/githubCoachResponse';
 
 export type ChatMessage = {
   id: string;
@@ -161,11 +162,20 @@ export function useCoachChat({ onAction }: UseCoachChatOptions = {}) {
         const savedUser = await addUserMessage(convId, text);
         setMessages((prev) => [...prev, toChatMessage(savedUser)]);
 
-        const response: CoachResponse = await respondToRequest(
-          buildContext(),
-          text,
-          historyForEngine
-        );
+        // GitHub-activity questions are answered from the local cache via the
+        // GitHub↔Coach bridge; everything else goes to the normal offline
+        // coach engine.
+        let response: CoachResponse | null = await buildGithubCoachResponse(text);
+        let githubHandled = false;
+        if (response) {
+          githubHandled = true;
+        } else {
+          response = await respondToRequest(
+            buildContext(),
+            text,
+            historyForEngine
+          );
+        }
 
         const body = persistenceBody(
           response,
@@ -174,7 +184,7 @@ export function useCoachChat({ onAction }: UseCoachChatOptions = {}) {
         const savedAssistant = await addAssistantMessage(convId, body);
         setMessages((prev) => [...prev, toChatMessage(savedAssistant)]);
 
-        if (response.actions.length > 0) {
+        if (response.actions.length > 0 || githubHandled) {
           setSuggestedActions(response.actions);
         }
         return true;

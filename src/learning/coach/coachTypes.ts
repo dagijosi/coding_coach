@@ -27,6 +27,7 @@ export type CoachIntent =
   | 'lessonHelp'
   | 'problemHelp'
   | 'solution'
+  | 'github'
   | 'unknown';
 
 export type SuggestedActionType =
@@ -38,7 +39,8 @@ export type SuggestedActionType =
   | 'view_progress'
   | 'next_hint'
   | 'retry_problem'
-  | 'view_solution';
+  | 'view_solution'
+  | 'open_github';
 
 /**
  * A reference to something the learner can do next. The UI decides how to
