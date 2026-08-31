@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 
@@ -564,6 +564,7 @@ function AppUpdateSettings() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [checking, setChecking] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [info, setInfo] = useState<ReleaseInfo | null>(null);
   const [checked, setChecked] = useState(false);
 
@@ -575,6 +576,28 @@ function AppUpdateSettings() {
       setChecked(true);
     } finally {
       setChecking(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!info) return;
+    setDownloading(true);
+    try {
+      const ok = await openDownloadUrl(info.downloadUrl, info.htmlUrl);
+      if (!ok) {
+        Alert.alert(
+          'Download APK',
+          'Could not automatically start download. Please visit GitHub Releases to download the APK.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open GitHub', onPress: () => openDownloadUrl(info.htmlUrl) },
+          ]
+        );
+      }
+    } catch {
+      Alert.alert('Error', 'Unable to open download URL.');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -594,7 +617,7 @@ function AppUpdateSettings() {
           <View style={styles.flex}>
             <AppText variant="body">Coding Coach</AppText>
             <AppText variant="caption" muted>
-              Current Version: v{info?.currentVersion ?? '1.0.0'}
+              Current Version: v{info?.currentVersion ?? '1.0.2'}
             </AppText>
           </View>
           <Button
@@ -630,27 +653,64 @@ function AppUpdateSettings() {
                 </View>
 
                 {info.releaseNotes ? (
-                  <AppText variant="bodySmall" muted style={styles.releaseNotes} numberOfLines={3}>
-                    {info.releaseNotes}
-                  </AppText>
+                  <View style={styles.notesContainer}>
+                    <AppText variant="caption" style={{ fontWeight: '700', color: colors.text.primary, marginBottom: 4 }}>
+                      Release Highlights
+                    </AppText>
+                    <AppText variant="bodySmall" muted style={styles.releaseNotes}>
+                      {info.releaseNotes}
+                    </AppText>
+                  </View>
                 ) : null}
 
-                <Button
-                  title={`Download & Install APK (v${info.latestVersion})`}
-                  variant="success"
-                  onPress={() => openDownloadUrl(info.downloadUrl)}
-                />
+                <View style={styles.updateActions}>
+                  <Button
+                    title={downloading ? 'Starting download...' : `Download & Install APK (v${info.latestVersion})`}
+                    variant="success"
+                    loading={downloading}
+                    disabled={downloading}
+                    onPress={handleDownload}
+                  />
+
+                  {info.changelogUrl ? (
+                    <Pressable
+                      style={styles.changelogLink}
+                      onPress={() => openDownloadUrl(info.changelogUrl)}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="open-outline" size={14} color={colors.accent.primary} />
+                      <AppText variant="caption" style={{ color: colors.accent.primary, fontWeight: '600' }}>
+                        View Full Changelog on GitHub
+                      </AppText>
+                    </Pressable>
+                  ) : null}
+                </View>
               </View>
             ) : (
-              <View style={styles.upToDateRow}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={20}
-                  color={colors.status.success}
-                />
-                <AppText variant="bodySmall" muted>
-                  You're on the latest version ({info.currentVersion}).
-                </AppText>
+              <View style={styles.upToDateContainer}>
+                <View style={styles.upToDateRow}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color={colors.status.success}
+                  />
+                  <AppText variant="bodySmall" muted>
+                    You're on the latest version (v{info.currentVersion}).
+                  </AppText>
+                </View>
+
+                {info.htmlUrl ? (
+                  <Pressable
+                    style={styles.changelogLink}
+                    onPress={() => openDownloadUrl(info.htmlUrl)}
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="logo-github" size={14} color={colors.text.muted} />
+                    <AppText variant="caption" muted>
+                      View GitHub Releases
+                    </AppText>
+                  </Pressable>
+                ) : null}
               </View>
             )}
           </View>
@@ -966,8 +1026,31 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing.sm,
     },
 
+    notesContainer: {
+      padding: spacing.sm,
+      backgroundColor: colors.surface.primary,
+      borderRadius: radius.sm,
+    },
+
     releaseNotes: {
-      lineHeight: 18,
+      lineHeight: 20,
+    },
+
+    updateActions: {
+      gap: spacing.sm,
+      marginTop: spacing.xs,
+    },
+
+    changelogLink: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.xs,
+      paddingVertical: spacing.xs,
+    },
+
+    upToDateContainer: {
+      gap: spacing.xs,
     },
 
     upToDateRow: {

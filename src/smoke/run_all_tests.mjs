@@ -12,6 +12,7 @@ const TEST_FILES = [
   'coach_smoke.mjs',
   'github_smoke.mjs',
   'hint_explanation_smoke.mjs',
+  'update_smoke.mjs',
 ];
 
 console.log('====================================================');
