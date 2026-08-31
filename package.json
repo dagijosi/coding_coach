@@ -38,7 +38,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "node src/smoke/run_all_tests.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "content:validate": "node --import tsx/esm scripts/validate_content.mjs || npx ts-node scripts/validate_content.mjs || node scripts/validate_content.mjs"
   },
   "private": true
 }

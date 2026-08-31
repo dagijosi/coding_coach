@@ -45,6 +45,11 @@ import {
   type ThemeColors,
   type ThemeMode,
 } from '@/theme';
+import {
+  checkAppUpdates,
+  openDownloadUrl,
+  type ReleaseInfo,
+} from '@/services/updateService';
 
 const LOCAL_PROFILE_NAME = 'Dagi';
 
@@ -523,11 +528,12 @@ export default function ProgressScreen() {
         </>
       )}
 
-      {/* Settings */}
+      {/* Settings & Updates */}
       <View style={styles.section}>
-        <SectionHeader title="Settings" icon="settings-outline" />
+        <SectionHeader title="Settings & Updates" icon="settings-outline" />
         <AppearanceSettings />
         <GitHubSettings />
+        <AppUpdateSettings />
       </View>
     </TabScreen>
   );
@@ -549,6 +555,106 @@ function GitHubSettings() {
           </AppText>
         </View>
         <Ionicons name="chevron-forward" size={20} color={colors.text.muted} />
+      </View>
+    </Card>
+  );
+}
+
+function AppUpdateSettings() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const [checking, setChecking] = useState(false);
+  const [info, setInfo] = useState<ReleaseInfo | null>(null);
+  const [checked, setChecked] = useState(false);
+
+  const handleCheck = async () => {
+    setChecking(true);
+    try {
+      const res = await checkAppUpdates();
+      setInfo(res);
+      setChecked(true);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <Card>
+      <View style={styles.topicHeader}>
+        <Ionicons
+          name="cloud-download-outline"
+          size={18}
+          color={colors.accent.secondary}
+        />
+        <AppText variant="h3">App &amp; Updates</AppText>
+      </View>
+
+      <View style={styles.updateContainer}>
+        <View style={styles.versionRow}>
+          <View style={styles.flex}>
+            <AppText variant="body">Coding Coach</AppText>
+            <AppText variant="caption" muted>
+              Current Version: v{info?.currentVersion ?? '1.0.0'}
+            </AppText>
+          </View>
+          <Button
+            title={checking ? 'Checking...' : 'Check for Updates'}
+            variant="secondary"
+            loading={checking}
+            disabled={checking}
+            onPress={handleCheck}
+          />
+        </View>
+
+        {checked && info && (
+          <View style={styles.updateResult}>
+            {info.hasUpdate ? (
+              <View style={[styles.updateCard, { borderColor: colors.status.success }]}>
+                <View style={styles.updateHeader}>
+                  <Ionicons
+                    name="arrow-up-circle"
+                    size={24}
+                    color={colors.status.success}
+                  />
+                  <View style={styles.flex}>
+                    <AppText variant="h3">
+                      {info.releaseName || `Version ${info.latestVersion} Available`}
+                    </AppText>
+                    {info.publishedAt && (
+                      <AppText variant="caption" muted>
+                        Released: {new Date(info.publishedAt).toLocaleDateString()}
+                      </AppText>
+                    )}
+                  </View>
+                  <Badge label="NEW" variant="success" />
+                </View>
+
+                {info.releaseNotes ? (
+                  <AppText variant="bodySmall" muted style={styles.releaseNotes} numberOfLines={3}>
+                    {info.releaseNotes}
+                  </AppText>
+                ) : null}
+
+                <Button
+                  title={`Download & Install APK (v${info.latestVersion})`}
+                  variant="success"
+                  onPress={() => openDownloadUrl(info.downloadUrl)}
+                />
+              </View>
+            ) : (
+              <View style={styles.upToDateRow}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={20}
+                  color={colors.status.success}
+                />
+                <AppText variant="bodySmall" muted>
+                  You're on the latest version ({info.currentVersion}).
+                </AppText>
+              </View>
+            )}
+          </View>
+        )}
       </View>
     </Card>
   );
@@ -825,6 +931,50 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: hexWithAlpha(colors.accent.primary, 0.12),
       alignItems: 'center',
       justifyContent: 'center',
+    },
+
+    updateContainer: {
+      gap: spacing.md,
+      paddingTop: spacing.xs,
+    },
+
+    versionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+    },
+
+    updateResult: {
+      marginTop: spacing.xs,
+      paddingTop: spacing.sm,
+      borderTopWidth: 1,
+      borderTopColor: colors.border.default,
+    },
+
+    updateCard: {
+      gap: spacing.sm,
+      padding: spacing.md,
+      borderRadius: radius.md,
+      backgroundColor: colors.surface.secondary,
+      borderWidth: 1,
+    },
+
+    updateHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+
+    releaseNotes: {
+      lineHeight: 18,
+    },
+
+    upToDateRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      paddingVertical: spacing.xs,
     },
   });
 
