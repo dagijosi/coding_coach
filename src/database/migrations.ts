@@ -32,7 +32,27 @@ type Migration = (db: SQLiteDatabase) => Promise<void>;
 
 const MIGRATIONS: Record<number, Migration> = {
   // Future migrations keyed by the version they bring the database UP TO.
-  // e.g.  2: async (db) => { await db.execAsync(`ALTER TABLE ...`); },
+  // e.g.  3: async (db) => { await db.execAsync(`ALTER TABLE ...`); },
+  2: async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS conversations (
+        id TEXT PRIMARY KEY NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS conversation_messages (
+        id TEXT PRIMARY KEY NOT NULL,
+        conversation_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+          ON DELETE CASCADE
+      );
+    `);
+  },
 };
 
 async function currentVersion(db: SQLiteDatabase): Promise<number> {

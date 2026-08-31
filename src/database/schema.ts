@@ -16,7 +16,7 @@
  * `PRAGMA user_version` and applies pending migrations to bring an install up
  * to date without destroying user progress.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const SCHEMA_TABLES: string[] = [
   'app_meta',
@@ -32,6 +32,8 @@ export const SCHEMA_TABLES: string[] = [
   'problem_attempts',
   'challenge_attempts',
   'user_progress',
+  'conversations',
+  'conversation_messages',
 ];
 
 /**
@@ -173,5 +175,23 @@ export const SCHEMA_SQL = `
     current_streak INTEGER NOT NULL DEFAULT 0,
     longest_streak INTEGER NOT NULL DEFAULT 0,
     last_activity_date TEXT
+  );
+
+  -- ---------------------- chatbot (Phase 7) ----------------------
+  CREATE TABLE IF NOT EXISTS conversations (
+    id TEXT PRIMARY KEY NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS conversation_messages (
+    id TEXT PRIMARY KEY NOT NULL,
+    conversation_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+      ON DELETE CASCADE
   );
 `;
