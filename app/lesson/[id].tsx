@@ -53,6 +53,10 @@ import type {
 
 import { executeChallenge } from '@/code/execution/executeChallenge';
 import { getJavaScriptEngine } from '@/code/engine';
+import {
+  getLanguageDescriptor,
+  type QuickSnippet,
+} from '@/code/languages/languageRegistry';
 import type { CodeChallengeResult } from '@/code/types';
 import { CodeEditor } from '@/components/code/CodeEditor';
 
@@ -912,8 +916,10 @@ function TryItStep({
     .map((a) => JSON.stringify(a))
     .join(', ')})`;
 
-  const snippets = config.quickSnippets ?? (language === 'python' ? PYTHON_DEFAULT_SNIPPETS : DEFAULT_QUICK_SNIPPETS);
-  const langLabel = language === 'python' ? 'Python' : language === 'typescript' ? 'TypeScript' : 'JavaScript';
+  const langDesc = getLanguageDescriptor(language);
+  const snippets = config.quickSnippets ?? langDesc.quickSnippets;
+  const langLabel = langDesc.label;
+  const langIcon = langDesc.icon;
 
   return (
     <FadeInView style={styles.stepContent}>
@@ -1091,8 +1097,8 @@ function TryItStep({
       <View style={styles.editorContainer}>
         <View style={styles.editorHeader}>
           <View style={styles.editorHeaderLeft}>
-            <Ionicons name="code-slash" size={13} color={colors.accent.secondary} />
-            <AppText variant="caption" style={styles.editorLang}>
+            <Ionicons name={langIcon} size={13} color={langDesc.color} />
+            <AppText variant="caption" style={[styles.editorLang, { color: langDesc.color }]}>
               {langLabel}
             </AppText>
             <AppText variant="caption" muted style={styles.callPreview} numberOfLines={1}>
@@ -1452,9 +1458,22 @@ function ChallengeStep({
 
       <View style={styles.editorContainer}>
         <View style={styles.editorHeader}>
-          <AppText variant="caption" style={styles.editorLang}>
-            {language === 'python' ? 'Python' : language === 'typescript' ? 'TypeScript' : 'JavaScript'}
-          </AppText>
+          <View style={styles.editorHeaderLeft}>
+            <Ionicons
+              name={getLanguageDescriptor(language).icon}
+              size={13}
+              color={getLanguageDescriptor(language).color}
+            />
+            <AppText
+              variant="caption"
+              style={[
+                styles.editorLang,
+                { color: getLanguageDescriptor(language).color },
+              ]}
+            >
+              {getLanguageDescriptor(language).label}
+            </AppText>
+          </View>
           <EngineBadge status={engineStatus} compact />
         </View>
         <CodeEditor value={code} onChangeText={setCode} minHeight={180} />
@@ -1914,29 +1933,33 @@ function getTryItConfig(lesson: Lesson): TryItConfig {
   if (TRY_IT_BY_LESSON[lesson.id]) {
     return TRY_IT_BY_LESSON[lesson.id];
   }
-  if (lesson.language === 'python' || lesson.id.startsWith('lesson-py')) {
-    return {
-      starterCode: `def solve(value):
-    # Python interactive playground
-    print("Received input value:", value)
-    return value * 2`,
-      functionName: 'solve',
-      args: [10],
-      params: [
-        { name: 'value', label: 'Input Value', defaultValue: 10, type: 'number', min: 0, max: 100, step: 5, options: [5, 10, 20, 50] },
-      ],
-      hint: 'Edit the Python function or adjust the input value, then press Run.',
-      conceptNote: 'Write Python functions using def, indentation, and return values.',
-      miniGoal: {
-        description: 'Make solve(value) return 20 or more',
-        check: (result) => typeof result === 'number' && result >= 20,
+  const langDesc = getLanguageDescriptor(lesson.language);
+  return {
+    starterCode: langDesc.defaultStarterCode('solve'),
+    functionName: 'solve',
+    args: [10],
+    params: [
+      {
+        name: 'value',
+        label: 'Input Value',
+        defaultValue: 10,
+        type: 'number',
+        min: 0,
+        max: 100,
+        step: 5,
+        options: [5, 10, 20, 50],
       },
-      quickSnippets: PYTHON_DEFAULT_SNIPPETS,
-      explanationTemplate: (args, result) =>
-        `Ran solve(${JSON.stringify(args[0])}) -> Result: ${JSON.stringify(result)}`,
-    };
-  }
-  return DEFAULT_TRY_IT;
+    ],
+    hint: `Experiment with ${langDesc.shortLabel} code and inputs, then click Run.`,
+    conceptNote: `Write ${langDesc.shortLabel} code with valid syntax and return values.`,
+    miniGoal: {
+      description: 'Execute the code successfully and return a valid result',
+      check: (result) => result !== undefined && result !== null,
+    },
+    quickSnippets: langDesc.quickSnippets,
+    explanationTemplate: (args, result) =>
+      `Ran solve(${JSON.stringify(args[0])}) -> Result: ${JSON.stringify(result)}`,
+  };
 }
 
 function badgeVariant(difficulty: Lesson['difficulty']) {

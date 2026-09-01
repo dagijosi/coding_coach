@@ -13,6 +13,7 @@ const TEST_FILES = [
   'github_smoke.mjs',
   'hint_explanation_smoke.mjs',
   'python_smoke.mjs',
+  'polyglot_smoke.mjs',
   'update_smoke.mjs',
 ];
 
