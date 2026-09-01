@@ -84,6 +84,7 @@ export async function sendTask(
     code: string;
     functionName: string;
     args: unknown[];
+    language?: string;
   },
   timeoutMs: number
 ): Promise<EngineResult> {
@@ -117,6 +118,7 @@ export async function sendTask(
         code: task.code,
         functionName: task.functionName,
         args: task.args,
+        language: task.language,
       });
 
       try {

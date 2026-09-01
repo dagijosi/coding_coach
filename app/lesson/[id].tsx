@@ -114,6 +114,17 @@ const DEFAULT_SNIPPETS = [
   { label: '===', insert: ' === ' },
 ];
 
+const PYTHON_DEFAULT_SNIPPETS: QuickSnippet[] = [
+  { label: 'def', insert: 'def ' },
+  { label: 'return', insert: 'return ' },
+  { label: 'print()', insert: "\n    print('Value is:', result)" },
+  { label: 'range()', insert: 'range(1, 10)' },
+  { label: 'len()', insert: 'len(' },
+  { label: 'if', insert: 'if ' },
+  { label: 'in', insert: ' in ' },
+  { label: '""', insert: '""' },
+];
+
 const TRY_IT_BY_LESSON: Record<string, TryItConfig> = {
   'lesson-variables': {
     starterCode: `function describeTotal(base) {
@@ -191,6 +202,117 @@ const TRY_IT_BY_LESSON: Record<string, TryItConfig> = {
     ],
     explanationTemplate: (args, result) =>
       `Ran sum(${JSON.stringify(args[0])}, ${JSON.stringify(args[1])}) with your code -> Result returned: ${JSON.stringify(result)}`,
+  },
+  // Python Lessons
+  'lesson-py-variables': {
+    starterCode: `def celsius_to_fahrenheit(c):
+    # Convert Celsius to Fahrenheit
+    print("Converting Celsius value:", c)
+    fahrenheit = (c * 9/5) + 32
+    return fahrenheit`,
+    functionName: 'celsius_to_fahrenheit',
+    args: [25],
+    params: [
+      { name: 'c', label: 'Celsius (°C)', defaultValue: 25, type: 'number', min: -40, max: 100, step: 5, options: [0, 25, 37, 100] },
+    ],
+    hint: 'Experiment with different Celsius temperatures or tweak the formula, then press Run.',
+    conceptNote: 'Python variables are dynamically typed. Functions use def and indentation.',
+    miniGoal: {
+      description: 'Convert a temperature to get over 100°F (try 38°C or more)',
+      check: (result) => typeof result === 'number' && result >= 100,
+    },
+    quickSnippets: [
+      { label: '+ 32', insert: ' + 32' },
+      { label: '* 9/5', insert: ' * (9/5)' },
+      { label: 'print(c)', insert: '\n    print("Input c is:", c)' },
+      { label: 'round()', insert: 'round(fahrenheit, 1)' },
+    ],
+    explanationTemplate: (args, result) =>
+      `Ran celsius_to_fahrenheit(c = ${JSON.stringify(args[0])}) -> Result: ${JSON.stringify(result)}°F`,
+  },
+  'lesson-py-strings': {
+    starterCode: `def is_palindrome(s):
+    # Palindrome checker in Python
+    cleaned = s.lower()
+    print("Checking text:", cleaned)
+    return cleaned == cleaned[::-1]`,
+    functionName: 'is_palindrome',
+    args: ['racecar'],
+    params: [
+      { name: 's', label: 'Text string', defaultValue: 'racecar', type: 'string', options: ['racecar', 'Madam', 'python', 'level'] },
+    ],
+    hint: 'Try different words or expressions. In Python, s[::-1] slices a string backwards.',
+    conceptNote: 'Python strings support slicing, methods like .lower(), and reversal with [::-1].',
+    miniGoal: {
+      description: 'Test a word that returns True for palindrome check',
+      check: (result) => result === true,
+    },
+    quickSnippets: [
+      { label: '[::-1]', insert: '[::-1]' },
+      { label: '.lower()', insert: '.lower()' },
+      { label: '.upper()', insert: '.toUpperCase()' },
+      { label: 'len(s)', insert: 'len(s)' },
+    ],
+    explanationTemplate: (args, result) =>
+      `Ran is_palindrome(${JSON.stringify(args[0])}) -> Returns: ${JSON.stringify(result)}`,
+  },
+  'lesson-py-control-flow': {
+    starterCode: `def fizzbuzz(n):
+    # Generates a list of FizzBuzz values from 1 to n
+    result = []
+    for i in range(1, n + 1):
+        if i % 15 == 0:
+            result.append("FizzBuzz")
+        elif i % 3 == 0:
+            result.append("Fizz")
+        elif i % 5 == 0:
+            result.append("Buzz")
+        else:
+            result.append(i)
+    return result`,
+    functionName: 'fizzbuzz',
+    args: [15],
+    params: [
+      { name: 'n', label: 'Limit (n)', defaultValue: 15, type: 'number', min: 1, max: 30, step: 1, options: [5, 10, 15, 20] },
+    ],
+    hint: 'Change the limit n and run to see the generated FizzBuzz list.',
+    conceptNote: 'Python uses if / elif / else blocks and range() for iterative loops.',
+    miniGoal: {
+      description: 'Run fizzbuzz with n >= 15 to include "FizzBuzz"',
+      check: (result) => Array.isArray(result) && result.includes('FizzBuzz'),
+    },
+    quickSnippets: [
+      { label: 'range(1, n+1)', insert: 'range(1, n + 1)' },
+      { label: '.append()', insert: '.append()' },
+      { label: '% 3 == 0', insert: ' % 3 == 0' },
+      { label: '% 5 == 0', insert: ' % 5 == 0' },
+    ],
+    explanationTemplate: (args, result) =>
+      `Ran fizzbuzz(n = ${JSON.stringify(args[0])}) -> Output: ${JSON.stringify(result)}`,
+  },
+  'lesson-py-lists': {
+    starterCode: `def double_numbers(nums):
+    # List comprehension in Python
+    print("Original numbers:", nums)
+    return [x * 2 for x in nums]`,
+    functionName: 'double_numbers',
+    args: [[1, 2, 3, 4, 5]],
+    params: [
+      { name: 'nums', label: 'List of numbers', defaultValue: [1, 2, 3, 4, 5], type: 'string', options: [[1, 2, 3], [5, 10, 15], [2, 4, 6, 8]] },
+    ],
+    hint: 'List comprehensions [expr for item in list] allow concise data transformations.',
+    conceptNote: 'Python lists are mutable sequences supporting indexing, appending, and comprehensions.',
+    miniGoal: {
+      description: 'Produce a list where the maximum number is 20 or higher',
+      check: (result) => Array.isArray(result) && result.some((x) => typeof x === 'number' && x >= 20),
+    },
+    quickSnippets: [
+      { label: '[x * 3 for x in nums]', insert: '[x * 3 for x in nums]' },
+      { label: 'sum(nums)', insert: 'sum(nums)' },
+      { label: 'len(nums)', insert: 'len(nums)' },
+    ],
+    explanationTemplate: (args, result) =>
+      `Ran double_numbers(${JSON.stringify(args[0])}) -> Output: ${JSON.stringify(result)}`,
   },
 };
 
@@ -524,7 +646,7 @@ function StepBody({
     case 'learn':
       return <LearnStep lesson={lesson} />;
     case 'try-it':
-      return <TryItStep engineStatus={engineStatus} config={tryIt} />;
+      return <TryItStep engineStatus={engineStatus} config={tryIt} language={lesson.language} />;
     case 'problem':
       return (
         <ProblemStep
@@ -539,6 +661,7 @@ function StepBody({
           key={step.challenge.id}
           challenge={step.challenge}
           engineStatus={engineStatus}
+          language={lesson.language}
           onPassed={() => onChallengePassed(step.challenge.id)}
         />
       );
@@ -683,9 +806,11 @@ function LearnStep({ lesson }: { lesson: Lesson }) {
 function TryItStep({
   engineStatus,
   config,
+  language,
 }: {
   engineStatus: 'available' | 'unavailable' | 'initializing' | 'error';
   config: TryItConfig;
+  language?: string;
 }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
@@ -748,6 +873,7 @@ function TryItStep({
       code,
       functionName: config.functionName,
       args: argsToRun,
+      language,
       timeoutMs: 2000,
     });
 
@@ -786,7 +912,8 @@ function TryItStep({
     .map((a) => JSON.stringify(a))
     .join(', ')})`;
 
-  const snippets = config.quickSnippets ?? DEFAULT_SNIPPETS;
+  const snippets = config.quickSnippets ?? (language === 'python' ? PYTHON_DEFAULT_SNIPPETS : DEFAULT_QUICK_SNIPPETS);
+  const langLabel = language === 'python' ? 'Python' : language === 'typescript' ? 'TypeScript' : 'JavaScript';
 
   return (
     <FadeInView style={styles.stepContent}>
@@ -966,7 +1093,7 @@ function TryItStep({
           <View style={styles.editorHeaderLeft}>
             <Ionicons name="code-slash" size={13} color={colors.accent.secondary} />
             <AppText variant="caption" style={styles.editorLang}>
-              JavaScript
+              {langLabel}
             </AppText>
             <AppText variant="caption" muted style={styles.callPreview} numberOfLines={1}>
               · will run {callSignature}
@@ -1234,10 +1361,12 @@ function ProblemStep({
 function ChallengeStep({
   challenge,
   engineStatus,
+  language,
   onPassed,
 }: {
   challenge: Challenge;
   engineStatus: 'available' | 'unavailable' | 'initializing' | 'error';
+  language?: string;
   onPassed: () => void;
 }) {
   const { colors } = useTheme();
@@ -1277,7 +1406,8 @@ function ChallengeStep({
     const challengeResult = await executeChallenge(
       code,
       challenge.functionName,
-      tests
+      tests,
+      language
     );
 
     setResult(challengeResult);
@@ -1323,7 +1453,7 @@ function ChallengeStep({
       <View style={styles.editorContainer}>
         <View style={styles.editorHeader}>
           <AppText variant="caption" style={styles.editorLang}>
-            JavaScript
+            {language === 'python' ? 'Python' : language === 'typescript' ? 'TypeScript' : 'JavaScript'}
           </AppText>
           <EngineBadge status={engineStatus} compact />
         </View>
@@ -1781,7 +1911,32 @@ function TestCaseRow({
 // ---------------------------------------------------------------------------
 
 function getTryItConfig(lesson: Lesson): TryItConfig {
-  return TRY_IT_BY_LESSON[lesson.id] ?? DEFAULT_TRY_IT;
+  if (TRY_IT_BY_LESSON[lesson.id]) {
+    return TRY_IT_BY_LESSON[lesson.id];
+  }
+  if (lesson.language === 'python' || lesson.id.startsWith('lesson-py')) {
+    return {
+      starterCode: `def solve(value):
+    # Python interactive playground
+    print("Received input value:", value)
+    return value * 2`,
+      functionName: 'solve',
+      args: [10],
+      params: [
+        { name: 'value', label: 'Input Value', defaultValue: 10, type: 'number', min: 0, max: 100, step: 5, options: [5, 10, 20, 50] },
+      ],
+      hint: 'Edit the Python function or adjust the input value, then press Run.',
+      conceptNote: 'Write Python functions using def, indentation, and return values.',
+      miniGoal: {
+        description: 'Make solve(value) return 20 or more',
+        check: (result) => typeof result === 'number' && result >= 20,
+      },
+      quickSnippets: PYTHON_DEFAULT_SNIPPETS,
+      explanationTemplate: (args, result) =>
+        `Ran solve(${JSON.stringify(args[0])}) -> Result: ${JSON.stringify(result)}`,
+    };
+  }
+  return DEFAULT_TRY_IT;
 }
 
 function badgeVariant(difficulty: Lesson['difficulty']) {

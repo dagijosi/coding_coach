@@ -5,6 +5,7 @@ export type ExecuteFunctionOptions = {
   code: string;
   functionName: string;
   args: unknown[];
+  language?: string;
   timeoutMs?: number;
 };
 

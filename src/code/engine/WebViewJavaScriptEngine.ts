@@ -36,6 +36,7 @@ export class WebViewJavaScriptEngine
         code: options.code,
         functionName: options.functionName,
         args: options.args,
+        language: options.language,
       },
       timeoutMs
     );

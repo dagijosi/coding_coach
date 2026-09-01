@@ -1,8 +1,11 @@
+import { buildPythonRunScript } from '../python/pythonRuntime';
+
 export type StudentCodeTask = {
   taskId: string;
   code: string;
   functionName: string;
   args: unknown[];
+  language?: string;
 };
 
 export type StudentCodeResult =
@@ -19,6 +22,21 @@ export type StudentCodeResult =
       executionTimeMs: number;
       logs?: string[];
     };
+
+function isPythonCode(code: string, language?: string): boolean {
+  if (language === 'python' || language === 'py') {
+    return true;
+  }
+  // Check for Python signatures
+  const trimmed = code.trim();
+  return (
+    /^\s*def\s+[a-zA-Z_][a-zA-Z0-9_]*\s*\(/.test(trimmed) ||
+    /^\s*class\s+[a-zA-Z_][a-zA-Z0-9_]*/.test(trimmed) ||
+    /^\s*import\s+[a-zA-Z_]/.test(trimmed) ||
+    /^\s*from\s+[a-zA-Z_]/.test(trimmed) ||
+    /:\s*$/.test(trimmed.split('\n')[0])
+  );
+}
 
 function normalizeValue(value: unknown): unknown {
   switch (typeof value) {
@@ -53,6 +71,17 @@ const NORMALIZE_JS = `var normalizeValue = function (value) {
 };`;
 
 export function buildRunScript(task: StudentCodeTask): string {
+  // If Python code, route to Python Runtime builder
+  if (isPythonCode(task.code, task.language)) {
+    return buildPythonRunScript({
+      taskId: task.taskId,
+      code: task.code,
+      functionName: task.functionName,
+      args: task.args,
+    });
+  }
+
+  // Otherwise standard JavaScript builder
   const payload = JSON.stringify(task);
   return [
     '(() => {',

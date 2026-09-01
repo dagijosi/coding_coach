@@ -11,7 +11,8 @@ import type {
 export async function executeChallenge(
   code: string,
   functionName: string,
-  tests: CodeTestCase[]
+  tests: CodeTestCase[],
+  language?: string
 ): Promise<CodeChallengeResult> {
   const engine = getJavaScriptEngine();
 
@@ -22,6 +23,7 @@ export async function executeChallenge(
       code,
       functionName,
       args: test.args,
+      language,
       timeoutMs: 2000,
     });
 
