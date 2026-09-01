@@ -51,6 +51,8 @@ import {
   getCurrentAppVersion,
   installDownloadedApk,
   openDownloadUrl,
+  pauseActiveDownload,
+  resumeActiveDownload,
   type DownloadProgress,
   type ReleaseInfo,
 } from '@/services/updateService';
@@ -723,6 +725,7 @@ function AppUpdateSettings() {
 
   const [checking, setChecking] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
   const [downloadComplete, setDownloadComplete] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -747,13 +750,14 @@ function AppUpdateSettings() {
     if (!info?.downloadUrl) return;
 
     setDownloading(true);
+    setIsPaused(false);
     setDownloadError(null);
     setDownloadComplete(false);
     setDownloadProgress({
       percent: 0,
       totalBytesWritten: 0,
       totalBytesExpectedToWrite: 0,
-      formattedProgress: 'Starting download...',
+      formattedProgress: 'Starting resumable download...',
     });
 
     const res = await downloadAndInstallApk(info.downloadUrl, (progress) => {
@@ -765,7 +769,27 @@ function AppUpdateSettings() {
     if (res.success) {
       setDownloadComplete(true);
     } else {
-      setDownloadError(res.error ?? 'Download failed. Please try again.');
+      setDownloadError(res.error ?? 'Download paused or interrupted.');
+    }
+  };
+
+  const handlePause = async () => {
+    await pauseActiveDownload();
+    setIsPaused(true);
+  };
+
+  const handleResume = async () => {
+    setIsPaused(false);
+    setDownloading(true);
+    setDownloadError(null);
+    const res = await resumeActiveDownload((progress) => {
+      setDownloadProgress(progress);
+    });
+    setDownloading(false);
+    if (res.success) {
+      setDownloadComplete(true);
+    } else {
+      setDownloadError(res.error ?? 'Resume interrupted.');
     }
   };
 
@@ -840,16 +864,41 @@ function AppUpdateSettings() {
                   </View>
                 ) : null}
 
-                {/* In-App Live Download Progress */}
+                {/* In-App Live Download Progress with Background Auto-Resume */}
                 {downloading && (
                   <View style={styles.downloadProgressWrap}>
                     <View style={styles.downloadProgressHeader}>
                       <Ionicons name="cloud-download" size={16} color={colors.accent.primary} />
-                      <AppText variant="bodySmall" style={{ fontWeight: '600', color: colors.accent.primary }}>
+                      <AppText variant="bodySmall" style={{ fontWeight: '600', color: colors.accent.primary, flex: 1 }}>
                         {downloadProgress?.formattedProgress ?? 'Downloading APK...'}
                       </AppText>
+                      <Pressable onPress={handlePause} style={{ padding: 4 }}>
+                        <AppText variant="caption" style={{ color: colors.status.warning, fontWeight: '700' }}>
+                          Pause
+                        </AppText>
+                      </Pressable>
                     </View>
                     <ProgressBar progress={downloadProgress?.percent ?? 0} />
+                    <AppText variant="caption" muted style={{ fontSize: 10, marginTop: 3 }}>
+                      ⚡ Background Auto-Resume Active: If you minimize the app, progress continues automatically upon return.
+                    </AppText>
+                  </View>
+                )}
+
+                {/* Paused State */}
+                {isPaused && (
+                  <View style={styles.downloadProgressWrap}>
+                    <View style={styles.downloadProgressHeader}>
+                      <Ionicons name="pause-circle" size={16} color={colors.status.warning} />
+                      <AppText variant="bodySmall" style={{ fontWeight: '600', color: colors.status.warning, flex: 1 }}>
+                        Download Paused at {downloadProgress?.formattedProgress ?? 'current progress'}
+                      </AppText>
+                      <Pressable onPress={handleResume} style={{ padding: 4 }}>
+                        <AppText variant="caption" style={{ color: colors.status.success, fontWeight: '700' }}>
+                          Resume
+                        </AppText>
+                      </Pressable>
+                    </View>
                   </View>
                 )}
 
@@ -863,7 +912,7 @@ function AppUpdateSettings() {
                   </View>
                 )}
 
-                {/* Download Error */}
+                {/* Download Error / Interrupted */}
                 {downloadError && (
                   <View style={styles.downloadErrorCard}>
                     <Ionicons name="alert-circle" size={18} color={colors.status.error} />
@@ -880,6 +929,12 @@ function AppUpdateSettings() {
                       variant="success"
                       onPress={handleReinstall}
                     />
+                  ) : isPaused ? (
+                    <Button
+                      title="Resume In-App Download"
+                      variant="success"
+                      onPress={handleResume}
+                    />
                   ) : (
                     <Button
                       title={
@@ -894,20 +949,16 @@ function AppUpdateSettings() {
                     />
                   )}
 
-                  <View style={styles.updateLinksRow}>
-                    {info.downloadUrl ? (
-                      <Pressable
-                        style={styles.changelogLink}
-                        onPress={() => openDownloadUrl(info.downloadUrl)}
-                        accessibilityRole="button"
-                      >
-                        <Ionicons name="open-outline" size={13} color={colors.text.muted} />
-                        <AppText variant="caption" muted>
-                          Download via Browser
-                        </AppText>
-                      </Pressable>
-                    ) : null}
+                  {/* Option 2: Download via System Manager in Notification Shade */}
+                  {info.downloadUrl ? (
+                    <Button
+                      title="Download in Background (Notification Shade)"
+                      variant="secondary"
+                      onPress={() => openDownloadUrl(info.downloadUrl)}
+                    />
+                  ) : null}
 
+                  <View style={styles.updateLinksRow}>
                     {info.changelogUrl ? (
                       <Pressable
                         style={styles.changelogLink}
@@ -916,7 +967,7 @@ function AppUpdateSettings() {
                       >
                         <Ionicons name="logo-github" size={13} color={colors.text.muted} />
                         <AppText variant="caption" muted>
-                          View Changelog
+                          View Full Changelog
                         </AppText>
                       </Pressable>
                     ) : null}

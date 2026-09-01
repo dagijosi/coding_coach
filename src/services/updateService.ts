@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
-import { Platform } from 'react-native';
+import { AppState, type AppStateStatus, Platform } from 'react-native';
 
 export type ReleaseInfo = {
   hasUpdate: boolean;
@@ -21,6 +21,7 @@ export type DownloadProgress = {
   totalBytesWritten: number;
   totalBytesExpectedToWrite: number;
   formattedProgress: string; // e.g. "12.4 MB / 52.8 MB (23%)"
+  isPaused?: boolean;
 };
 
 export type DownloadProgressCallback = (progress: DownloadProgress) => void;
@@ -31,12 +32,16 @@ const GITHUB_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/
 const LOCAL_APK_NAME = 'coding-coach-update.apk';
 
 let activeDownload: FileSystem.DownloadResumable | null = null;
+let lastProgressCallback: DownloadProgressCallback | null = null;
+let appStateSubscription: { remove: () => void } | null = null;
+let lastDownloadUrl: string | null = null;
+let isManuallyPaused = false;
 
 /**
  * Returns the current runtime app version declared in app.config.ts / Constants.
  */
 export function getCurrentAppVersion(): string {
-  return Constants.expoConfig?.version ?? '1.0.4';
+  return Constants.expoConfig?.version ?? '1.0.6';
 }
 
 /**
@@ -99,43 +104,31 @@ export async function checkAppUpdates(): Promise<ReleaseInfo> {
       },
     });
 
-    if (response.status === 404) {
-      const defaultHtmlUrl = `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`;
-      return {
-        hasUpdate: false,
-        currentVersion,
-        latestVersion: currentVersion,
-        releaseName: 'No releases published yet',
-        releaseNotes: 'You are running the latest version.',
-        downloadUrl: null,
-        changelogUrl: defaultHtmlUrl,
-        publishedAt: null,
-        htmlUrl: defaultHtmlUrl,
-      };
-    }
-
     if (!response.ok) {
-      throw new Error(`GitHub API error: ${response.status}`);
+      throw new Error(`GitHub API returned status ${response.status}`);
     }
 
     const data = await response.json();
-    const tag = (data.tag_name || '').replace(/^v/, '');
-    const latestVersion = tag || currentVersion;
+    const tagName: string = data.tag_name || '';
+    const latestVersion = tagName.replace(/^v/i, '').trim();
 
-    const apkAsset = Array.isArray(data.assets)
-      ? data.assets.find((asset: { name?: string; browser_download_url?: string }) =>
-          asset.name?.endsWith('.apk')
-        )
-      : null;
+    const hasUpdate = isNewerVersion(latestVersion, currentVersion);
 
-    const downloadUrl = apkAsset
-      ? apkAsset.browser_download_url
-      : data.html_url || `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`;
+    // Look for APK asset in the release
+    let downloadUrl: string | null = null;
+    if (Array.isArray(data.assets) && data.assets.length > 0) {
+      const apkAsset = data.assets.find(
+        (asset: { name?: string; browser_download_url?: string }) =>
+          typeof asset.name === 'string' && asset.name.toLowerCase().endsWith('.apk')
+      );
+      if (apkAsset?.browser_download_url) {
+        downloadUrl = apkAsset.browser_download_url;
+      }
+    }
 
     const htmlUrl = data.html_url || `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases`;
     const changelogUrl = extractChangelogUrl(data.body, htmlUrl);
     const releaseNotes = cleanReleaseNotes(data.body, latestVersion);
-    const hasUpdate = isNewerVersion(latestVersion, currentVersion);
 
     return {
       hasUpdate,
@@ -164,50 +157,88 @@ export async function checkAppUpdates(): Promise<ReleaseInfo> {
   }
 }
 
+function handleProgressEvent(dp: FileSystem.DownloadProgressData) {
+  const progress =
+    dp.totalBytesExpectedToWrite > 0
+      ? dp.totalBytesWritten / dp.totalBytesExpectedToWrite
+      : 0;
+
+  const writtenMb = (dp.totalBytesWritten / (1024 * 1024)).toFixed(1);
+  const totalMb =
+    dp.totalBytesExpectedToWrite > 0
+      ? (dp.totalBytesExpectedToWrite / (1024 * 1024)).toFixed(1)
+      : '?';
+
+  const percent = Math.min(1, Math.max(0, progress));
+
+  lastProgressCallback?.({
+    percent,
+    totalBytesWritten: dp.totalBytesWritten,
+    totalBytesExpectedToWrite: dp.totalBytesExpectedToWrite,
+    formattedProgress: `${writtenMb} MB / ${totalMb} MB (${Math.round(percent * 100)}%)`,
+    isPaused: isManuallyPaused,
+  });
+}
+
+function setupAppStateListener() {
+  if (appStateSubscription) return;
+
+  appStateSubscription = AppState.addEventListener('change', async (nextState: AppStateStatus) => {
+    if (nextState === 'background' || nextState === 'inactive') {
+      // Pause download gracefully when app is backgrounded so state is saved
+      if (activeDownload && !isManuallyPaused) {
+        try {
+          await activeDownload.pauseAsync();
+        } catch {
+          // Ignore background pause errors
+        }
+      }
+    } else if (nextState === 'active') {
+      // Auto-resume download when app returns to foreground
+      if (activeDownload && !isManuallyPaused) {
+        try {
+          const result = await activeDownload.resumeAsync();
+          if (result && result.uri) {
+            await installDownloadedApk(result.uri);
+          }
+        } catch {
+          // Will be retried on next user interaction
+        }
+      }
+    }
+  });
+}
+
 /**
- * Downloads the APK directly inside the app with progress updates,
- * then triggers Android native package installer automatically.
+ * Downloads the APK directly inside the app with resumable progress updates,
+ * persisting byte offsets across app minimizes, then triggers Android native package installer.
  */
 export async function downloadAndInstallApk(
   downloadUrl: string,
   onProgress?: DownloadProgressCallback
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    lastProgressCallback = onProgress ?? null;
+    lastDownloadUrl = downloadUrl;
+    isManuallyPaused = false;
+    setupAppStateListener();
+
     const localUri = `${FileSystem.documentDirectory}${LOCAL_APK_NAME}`;
 
-    // Clean up any stale incomplete download
-    const info = await FileSystem.getInfoAsync(localUri);
-    if (info.exists) {
-      await FileSystem.deleteAsync(localUri, { idempotent: true });
+    // If an active resumable download for the same URL exists, resume it!
+    if (activeDownload) {
+      const result = await activeDownload.resumeAsync();
+      if (!result || !result.uri) {
+        throw new Error('APK download was interrupted.');
+      }
+      return await installDownloadedApk(result.uri);
     }
-
-    const callback = (dp: FileSystem.DownloadProgressData) => {
-      const progress =
-        dp.totalBytesExpectedToWrite > 0
-          ? dp.totalBytesWritten / dp.totalBytesExpectedToWrite
-          : 0;
-
-      const writtenMb = (dp.totalBytesWritten / (1024 * 1024)).toFixed(1);
-      const totalMb =
-        dp.totalBytesExpectedToWrite > 0
-          ? (dp.totalBytesExpectedToWrite / (1024 * 1024)).toFixed(1)
-          : '?';
-
-      const percent = Math.min(1, Math.max(0, progress));
-
-      onProgress?.({
-        percent,
-        totalBytesWritten: dp.totalBytesWritten,
-        totalBytesExpectedToWrite: dp.totalBytesExpectedToWrite,
-        formattedProgress: `${writtenMb} MB / ${totalMb} MB (${Math.round(percent * 100)}%)`,
-      });
-    };
 
     activeDownload = FileSystem.createDownloadResumable(
       downloadUrl,
       localUri,
       {},
-      callback
+      handleProgressEvent
     );
 
     const result = await activeDownload.downloadAsync();
@@ -225,7 +256,54 @@ export async function downloadAndInstallApk(
     };
   } finally {
     activeDownload = null;
+    if (appStateSubscription) {
+      appStateSubscription.remove();
+      appStateSubscription = null;
+    }
   }
+}
+
+/**
+ * Manually pauses active in-app download without losing progress.
+ */
+export async function pauseActiveDownload(): Promise<void> {
+  isManuallyPaused = true;
+  if (activeDownload) {
+    try {
+      await activeDownload.pauseAsync();
+    } catch (e) {
+      console.warn('[updateService] Pause failed:', e);
+    }
+  }
+}
+
+/**
+ * Manually resumes active in-app download from where it was paused.
+ */
+export async function resumeActiveDownload(
+  onProgress?: DownloadProgressCallback
+): Promise<{ success: boolean; error?: string }> {
+  if (!activeDownload && lastDownloadUrl) {
+    return downloadAndInstallApk(lastDownloadUrl, onProgress);
+  }
+
+  if (activeDownload) {
+    isManuallyPaused = false;
+    lastProgressCallback = onProgress ?? lastProgressCallback;
+    try {
+      const result = await activeDownload.resumeAsync();
+      if (result?.uri) {
+        return await installDownloadedApk(result.uri);
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to resume download.',
+      };
+    }
+  }
+
+  return { success: false, error: 'No active download to resume.' };
 }
 
 /**
@@ -263,7 +341,9 @@ export async function installDownloadedApk(
 }
 
 /**
- * Fallback browser download.
+ * Downloads via Android System Notification Tray / Browser.
+ * This runs completely in the background via Android OS Download Manager,
+ * allowing the user to close the app or use other apps freely.
  */
 export async function openDownloadUrl(url: string | null, fallbackUrl?: string | null): Promise<boolean> {
   const target = url || fallbackUrl;
@@ -288,24 +368,27 @@ export async function openDownloadUrl(url: string | null, fallbackUrl?: string |
 
 /**
  * Compare two semver strings (e.g. "1.0.1" vs "1.0.0").
- * Returns true if remote is strictly newer than current.
  */
-export function isNewerVersion(remote: string, current: string): boolean {
-  const parse = (v: string) =>
-    v.replace(/^v/, '').split('.').map((segment) => {
-      const n = parseInt(segment, 10);
-      return Number.isNaN(n) ? 0 : n;
-    });
+export function isNewerVersion(latest: string, current: string): boolean {
+  const parseParts = (v: string): number[] => {
+    return v
+      .replace(/^v/i, '')
+      .split('.')
+      .map((part) => {
+        const n = parseInt(part, 10);
+        return isNaN(n) ? 0 : n;
+      });
+  };
 
-  const rParts = parse(remote);
-  const cParts = parse(current);
-  const len = Math.max(rParts.length, cParts.length);
+  const lParts = parseParts(latest);
+  const cParts = parseParts(current);
 
+  const len = Math.max(lParts.length, cParts.length);
   for (let i = 0; i < len; i++) {
-    const r = rParts[i] ?? 0;
+    const l = lParts[i] ?? 0;
     const c = cParts[i] ?? 0;
-    if (r > c) return true;
-    if (r < c) return false;
+    if (l > c) return true;
+    if (l < c) return false;
   }
 
   return false;
