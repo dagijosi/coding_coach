@@ -15,9 +15,9 @@ import {
   Button,
   Card,
   ErrorState,
-  LoadingState,
   ProgressBar,
   SectionHeader,
+  SkeletonCard,
 } from '@/components/ui';
 import { TabScreen } from '@/components/navigation';
 
@@ -38,6 +38,7 @@ import type { Challenge } from '@/types/learning';
 import type { UserProgress } from '@/types/progress';
 
 import { pickDailyItem } from '@/utils/dailyChallenge';
+import { hexWithAlpha } from '@/utils/color';
 
 import {
   radius,
@@ -202,7 +203,11 @@ export default function HomeScreen() {
   if (loading) {
     return (
       <TabScreen>
-        <LoadingState message="Loading your dashboard..." />
+        <View style={{ marginTop: spacing.md }}>
+          <SkeletonCard rows={2} />
+          <SkeletonCard rows={3} />
+          <SkeletonCard rows={2} />
+        </View>
       </TabScreen>
     );
   }
@@ -508,10 +513,17 @@ export default function HomeScreen() {
         <SectionHeader title="Quick Actions" icon="grid-outline" />
         <View style={styles.quickGrid}>
           <QuickAction
+            icon="search-outline"
+            label="Search All"
+            desc="Lessons &amp; problems"
+            color={colors.accent.primary}
+            onPress={() => router.push('/search')}
+          />
+          <QuickAction
             icon="book-outline"
             label="Curriculum"
             desc="Python &amp; JS tracks"
-            color={colors.accent.primary}
+            color={colors.accent.secondary}
             onPress={() => router.push('/learn')}
           />
           <QuickAction
@@ -525,15 +537,8 @@ export default function HomeScreen() {
             icon="chatbubble-ellipses-outline"
             label="AI Coach"
             desc="Offline assistance"
-            color={colors.accent.secondary}
+            color={colors.status.warning}
             onPress={() => router.push('/coach')}
-          />
-          <QuickAction
-            icon="person-outline"
-            label="Profile"
-            desc="Stats &amp; Settings"
-            color={colors.status.info}
-            onPress={() => router.push('/profile')}
           />
         </View>
       </View>
@@ -623,14 +628,6 @@ function QuickAction({
       <Ionicons name="chevron-forward" size={14} color={hexWithAlpha(color, 0.6)} />
     </Pressable>
   );
-}
-
-function hexWithAlpha(hex: string, alpha: number): string {
-  const cleanHex = hex.replace('#', '');
-  const r = parseInt(cleanHex.substring(0, 2), 16) || 0;
-  const g = parseInt(cleanHex.substring(2, 4), 16) || 0;
-  const b = parseInt(cleanHex.substring(4, 6), 16) || 0;
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 const makeStyles = (colors: ThemeColors) =>

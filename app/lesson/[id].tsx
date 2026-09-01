@@ -23,6 +23,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfettiBurst,
   FadeInView,
   IconButton,
   ProgressBar,
@@ -30,8 +31,11 @@ import {
 } from '@/components/ui';
 import { useToast } from '@/components/toast';
 import { useSessionStore } from '@/store/sessionStore';
+import { checkAndUnlockAchievements } from '@/features/achievements/achievementService';
+import { scheduleInitialReview } from '@/learning/srs/reviewService';
 
 import { getLessonById } from '@/repositories/lessonRepository';
+import { getTopicById } from '@/repositories/topicRepository';
 import { getConceptsByLesson } from '@/repositories/conceptRepository';
 import { getProblemsByLesson } from '@/repositories/problemRepository';
 import { getChallengesByLesson } from '@/repositories/challengeRepository';
@@ -366,6 +370,7 @@ export default function LessonScreen() {
   const { showToast } = useToast();
 
   const [lesson, setLesson] = useState<Lesson | null>(null);
+  const [topicName, setTopicName] = useState<string | null>(null);
   const [concepts, setConcepts] = useState<Concept[]>([]);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
@@ -378,6 +383,7 @@ export default function LessonScreen() {
 
   const [solvedProblemIds, setSolvedProblemIds] = useState<Set<string>>(new Set());
   const [passedChallengeIds, setPassedChallengeIds] = useState<Set<string>>(new Set());
+  const [showConfetti, setShowConfetti] = useState(false);
   const didRestore = useRef(false);
 
   useEffect(() => {
@@ -394,7 +400,7 @@ export default function LessonScreen() {
       getProblemsByLesson(id),
       getChallengesByLesson(id),
     ])
-      .then(([lessonData, conceptsData, problemsData, challengesData]) => {
+      .then(async ([lessonData, conceptsData, problemsData, challengesData]) => {
         if (!lessonData) {
           setLoadError(true);
           return;
@@ -403,6 +409,13 @@ export default function LessonScreen() {
         setConcepts(conceptsData);
         setProblems(problemsData);
         setChallenges(challengesData);
+
+        if (lessonData.topicId) {
+          getTopicById(lessonData.topicId)
+            .then((t) => setTopicName(t?.name ?? null))
+            .catch(() => {});
+        }
+
         useSessionStore
           .getState()
           .setCurrentLesson({ id: lessonData.id, title: lessonData.title });
@@ -544,6 +557,19 @@ export default function LessonScreen() {
     );
   }
 
+  useEffect(() => {
+    if (step?.kind === 'complete') {
+      setShowConfetti(true);
+      checkAndUnlockAchievements()
+        .then((newly) => {
+          if (newly.length > 0) {
+            showToast(`🏆 Badge Unlocked: ${newly[0].title}!`, 'success');
+          }
+        })
+        .catch(() => {});
+    }
+  }, [step?.kind]);
+
   const handleFinish = async () => {
     try {
       const xp = await completeLesson(lesson.id);
@@ -551,7 +577,15 @@ export default function LessonScreen() {
         xp > 0 ? `Lesson complete! +${xp} XP` : 'Lesson complete!',
         'success'
       );
-      setTimeout(() => router.back(), 650);
+      scheduleInitialReview(lesson.id, 'lesson').catch(() => {});
+      checkAndUnlockAchievements()
+        .then((newly) => {
+          if (newly.length > 0) {
+            showToast(`🏆 Badge Unlocked: ${newly[0].title}!`, 'success');
+          }
+        })
+        .catch(() => {});
+      setTimeout(() => router.back(), 700);
     } catch {
       showToast('Could not save your progress. Please try again.', 'error');
     }
@@ -559,15 +593,30 @@ export default function LessonScreen() {
 
   return (
     <View style={styles.root}>
+      {showConfetti && (
+        <ConfettiBurst onComplete={() => setShowConfetti(false)} />
+      )}
       {/* Fixed header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <View style={styles.headerRow}>
           <IconButton name="arrow-back" onPress={() => router.back()} />
 
-          <View style={styles.headerRight}>
-            <AppText variant="caption" muted>
-              Step {Math.min(currentIndex + 1, steps.length)} of {steps.length}
+          <View style={styles.headerCenter}>
+            <AppText variant="caption" muted numberOfLines={1} style={styles.breadcrumbText}>
+              {topicName ? `${topicName} • ` : ''}{lesson.language.toUpperCase()}
             </AppText>
+            <AppText variant="bodySmall" style={styles.headerLessonTitle} numberOfLines={1}>
+              {lesson.title}
+            </AppText>
+          </View>
+
+          <View style={styles.headerRight}>
+            <View style={styles.timeBadge}>
+              <Ionicons name="time-outline" size={12} color={colors.text.muted} />
+              <AppText variant="caption" muted style={styles.timeBadgeText}>
+                {lesson.estimatedMinutes}m
+              </AppText>
+            </View>
             <Badge
               label={lesson.difficulty}
               variant={badgeVariant(lesson.difficulty)}
@@ -2016,12 +2065,48 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: spacing.xs,
+      gap: spacing.sm,
+    },
+
+    headerCenter: {
+      flex: 1,
+      gap: 1,
+      paddingHorizontal: 2,
+    },
+
+    breadcrumbText: {
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      color: colors.accent.primary,
+    },
+
+    headerLessonTitle: {
+      fontWeight: '700',
+      color: colors.text.primary,
     },
 
     headerRight: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.sm,
+      gap: spacing.xs,
+    },
+
+    timeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: radius.full,
+      backgroundColor: colors.surface.secondary,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+    },
+
+    timeBadgeText: {
+      fontSize: 10,
+      fontWeight: '600',
     },
 
     progressWrap: {

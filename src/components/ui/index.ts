@@ -12,3 +12,5 @@ export { ProgressBar } from './ProgressBar';
 export { Screen } from './Screen';
 export type { ScreenProps } from './Screen';
 export { SectionHeader } from './SectionHeader';
+export { SkeletonLoader, SkeletonCard } from './SkeletonLoader';
+export { ConfettiBurst } from './ConfettiBurst';

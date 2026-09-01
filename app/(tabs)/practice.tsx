@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   StyleSheet,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 
 import {
   AppText,
@@ -12,8 +13,8 @@ import {
   EmptyState,
   ErrorState,
   FadeInView,
-  LoadingState,
   SectionHeader,
+  SkeletonCard,
 } from '@/components/ui';
 import { TabScreen } from '@/components/navigation';
 
@@ -37,6 +38,7 @@ import {
 
 import { openChallengeById } from '@/utils/navigation';
 import type { Challenge } from '@/types/learning';
+import { hexWithAlpha } from '@/utils/color';
 
 import {
   radius,
@@ -81,7 +83,7 @@ export default function PracticeScreen() {
 
   const [filter, setFilter] = useState<DifficultyFilter>('all');
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
@@ -104,11 +106,31 @@ export default function PracticeScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      Promise.all([
+        getChallenges(),
+        getLessons(),
+        getTopics(),
+        getAttemptedChallengeIds(),
+        getCompletedChallengeIds(),
+        getRecentChallengeAttempts(),
+      ])
+        .then(([challenges, lessons, topics, attempted, completed, attempts]) => {
+          setIndex(buildPracticeIndex(challenges, lessons, topics));
+          setAttemptedIds(new Set(attempted));
+          setCompletedIds(new Set(completed));
+          setRecent(attempts);
+        })
+        .catch(() => {});
+    }, [])
+  );
 
   const statusOf = useMemo(
     () => (id: string): ChallengeStatus =>
@@ -140,11 +162,23 @@ export default function PracticeScreen() {
       .filter((group) => group.challenges.length > 0);
   }, [index, filter]);
 
+  const stats = useMemo(() => {
+    const total = index?.ordered.length ?? 0;
+    const solved = completedIds.size;
+    const attempted = attemptedIds.size;
+    const percent = total > 0 ? Math.round((solved / total) * 100) : 0;
+    return { total, solved, attempted, percent };
+  }, [index, completedIds, attemptedIds]);
+
   if (loading) {
     return (
       <TabScreen>
         <Header />
-        <LoadingState message="Loading practice..." />
+        <View style={{ marginTop: spacing.md }}>
+          <SkeletonCard rows={2} />
+          <SkeletonCard rows={3} />
+          <SkeletonCard rows={2} />
+        </View>
       </TabScreen>
     );
   }
@@ -175,6 +209,14 @@ export default function PracticeScreen() {
         />
       ) : (
         <>
+          {/* Practice Stats Bar */}
+          <PracticeStatsBar
+            total={stats.total}
+            solved={stats.solved}
+            attempted={stats.attempted}
+            percent={stats.percent}
+          />
+
           {allCompleted ? (
             <FadeInView>
               <View style={styles.allDone}>
@@ -498,8 +540,83 @@ function formatDate(iso: string): string {
   });
 }
 
+function PracticeStatsBar({
+  total,
+  solved,
+  attempted,
+  percent,
+}: {
+  total: number;
+  solved: number;
+  attempted: number;
+  percent: number;
+}) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
+  return (
+    <View style={styles.statsBar}>
+      <View style={styles.statBox}>
+        <AppText variant="h3" style={{ color: colors.accent.primary }}>
+          {solved}/{total}
+        </AppText>
+        <AppText variant="caption" muted>
+          Solved ({percent}%)
+        </AppText>
+      </View>
+
+      <View style={styles.statDivider} />
+
+      <View style={styles.statBox}>
+        <AppText variant="h3" style={{ color: colors.status.warning }}>
+          {attempted}
+        </AppText>
+        <AppText variant="caption" muted>
+          Attempted
+        </AppText>
+      </View>
+
+      <View style={styles.statDivider} />
+
+      <View style={styles.statBox}>
+        <AppText variant="h3" style={{ color: colors.text.secondary }}>
+          {Math.max(0, total - solved)}
+        </AppText>
+        <AppText variant="caption" muted>
+          Remaining
+        </AppText>
+      </View>
+    </View>
+  );
+}
+
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    statsBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-around',
+      backgroundColor: colors.surface.primary,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      marginTop: spacing.xs,
+      marginBottom: spacing.xs,
+    },
+
+    statBox: {
+      alignItems: 'center',
+      gap: 2,
+    },
+
+    statDivider: {
+      width: 1,
+      height: 24,
+      backgroundColor: colors.border.default,
+    },
+
     heroHeader: {
       gap: spacing.xs,
       paddingTop: spacing.xs,

@@ -10,8 +10,8 @@ import {
   Card,
   EmptyState,
   ErrorState,
-  LoadingState,
   ProgressBar,
+  SkeletonCard,
 } from '@/components/ui';
 import { TabScreen } from '@/components/navigation';
 
@@ -45,6 +45,9 @@ import {
   type ThemeColors,
   type ThemeMode,
 } from '@/theme';
+import { hexWithAlpha } from '@/utils/color';
+import { getAllAchievementsWithStatus } from '@/features/achievements/achievementService';
+import type { AchievementDefinition } from '@/features/achievements/achievementDefinitions';
 import {
   checkAppUpdates,
   downloadAndInstallApk,
@@ -92,15 +95,16 @@ type DashboardData = {
   insights: DashboardInsight[];
 };
 
-type ProfileTab = 'mastery' | 'insights' | 'settings';
+type ProfileTab = 'mastery' | 'badges' | 'insights' | 'settings';
 
 const PROFILE_TABS: Array<{
   id: ProfileTab;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
 }> = [
-  { id: 'mastery', label: 'Mastery & Stats', icon: 'speedometer-outline' },
-  { id: 'insights', label: 'Insights & History', icon: 'bulb-outline' },
+  { id: 'mastery', label: 'Mastery', icon: 'speedometer-outline' },
+  { id: 'badges', label: 'Badges', icon: 'trophy-outline' },
+  { id: 'insights', label: 'Insights', icon: 'bulb-outline' },
   { id: 'settings', label: 'Settings', icon: 'settings-outline' },
 ];
 
@@ -254,9 +258,12 @@ export default function ProgressScreen() {
 
   if (!data) {
     return (
-      <TabScreen scroll={false}>
+      <TabScreen>
         <HeaderHero />
-        <LoadingState full message="Loading your dashboard..." />
+        <View style={{ marginTop: spacing.md }}>
+          <SkeletonCard rows={3} />
+          <SkeletonCard rows={2} />
+        </View>
       </TabScreen>
     );
   }
@@ -507,7 +514,10 @@ export default function ProgressScreen() {
         </View>
       )}
 
-      {/* Tab 2: Insights & History */}
+      {/* Tab 2: Badges & Trophies */}
+      {activeTab === 'badges' && <AchievementsTab />}
+
+      {/* Tab 3: Insights & History */}
       {activeTab === 'insights' && (
         <View style={styles.tabContent}>
           {/* AI Learning Insights */}
@@ -595,11 +605,13 @@ export default function ProgressScreen() {
         </View>
       )}
 
-      {/* Tab 3: Settings & Updates */}
+      {/* Tab 4: Settings & Updates */}
       {activeTab === 'settings' && (
         <View style={styles.tabContent}>
           <AppearanceSettings />
           <NotificationPermissionSettings />
+          <ContentLibraryCard />
+          <OnboardingTourCard />
           <GitHubSettings />
           <AppUpdateSettings />
         </View>
@@ -609,23 +621,168 @@ export default function ProgressScreen() {
 }
 
 function HeaderHero() {
-  const { colors } = useTheme();
+  const { colors, mode, setMode } = useTheme();
   const styles = useThemedStyles(makeStyles);
+
+  const toggleTheme = () => {
+    if (mode === 'dark') setMode('light');
+    else if (mode === 'light') setMode('dark');
+    else setMode('dark');
+  };
 
   return (
     <View style={styles.heroHeader}>
-      <View style={styles.heroHeaderBadge}>
-        <Ionicons name="person-circle" size={13} color={colors.accent.primary} />
-        <AppText variant="caption" style={styles.heroBadgeText}>
-          DEVELOPER PROFILE
-        </AppText>
+      <View style={styles.heroHeaderTopRow}>
+        <View style={styles.heroHeaderBadge}>
+          <Ionicons name="person-circle" size={13} color={colors.accent.primary} />
+          <AppText variant="caption" style={styles.heroBadgeText}>
+            DEVELOPER PROFILE
+          </AppText>
+        </View>
+
+        <Pressable
+          onPress={toggleTheme}
+          style={styles.themeToggleChip}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle theme"
+        >
+          <Ionicons
+            name={mode === 'dark' ? 'moon' : mode === 'light' ? 'sunny' : 'phone-portrait-outline'}
+            size={13}
+            color={colors.accent.primary}
+          />
+          <AppText variant="caption" style={styles.themeToggleText}>
+            {mode === 'dark' ? 'Dark' : mode === 'light' ? 'Light' : 'Auto'}
+          </AppText>
+        </Pressable>
       </View>
+
       <AppText variant="h1" style={styles.heroTitle}>
         Your Profile &amp; Stats
       </AppText>
       <AppText variant="bodySmall" muted style={styles.heroSubtitle}>
         Track your XP growth, mastery analytics, and update preferences.
       </AppText>
+    </View>
+  );
+}
+
+function AchievementsTab() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
+  const [achievements, setAchievements] = useState<
+    Array<AchievementDefinition & { unlocked: boolean; unlockedAt?: string }>
+  >([]);
+
+  const loadAchievements = useCallback(async () => {
+    try {
+      const list = await getAllAchievementsWithStatus();
+      setAchievements(list);
+    } catch (e) {
+      console.error('Failed to load achievements:', e);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadAchievements();
+    }, [loadAchievements])
+  );
+
+  const unlockedCount = achievements.filter((a) => a.unlocked).length;
+  const progressRatio = achievements.length > 0 ? unlockedCount / achievements.length : 0;
+
+  return (
+    <View style={styles.tabContent}>
+      {/* Overview Banner */}
+      <Card>
+        <View style={styles.badgeOverviewHeader}>
+          <View style={styles.badgeOverviewLeft}>
+            <AppText variant="h3">Badges &amp; Trophies</AppText>
+            <AppText variant="caption" muted>
+              {unlockedCount} of {achievements.length} unlocked ({Math.round(progressRatio * 100)}%)
+            </AppText>
+          </View>
+          <View style={styles.badgeCountPill}>
+            <Ionicons name="trophy" size={15} color={colors.status.warning} />
+            <AppText variant="caption" style={{ fontWeight: '700', color: colors.status.warning }}>
+              {unlockedCount} Earned
+            </AppText>
+          </View>
+        </View>
+        <ProgressBar progress={progressRatio} />
+      </Card>
+
+      {/* Badges List */}
+      <View style={styles.badgeGrid}>
+        {achievements.map((item) => (
+          <Card
+            key={item.id}
+            style={[
+              styles.badgeCard,
+              !item.unlocked && styles.badgeCardLocked,
+            ]}
+          >
+            <View style={styles.badgeRow}>
+              <View
+                style={[
+                  styles.badgeIconBox,
+                  {
+                    backgroundColor: item.unlocked
+                      ? hexWithAlpha(colors.accent.primary, 0.15)
+                      : hexWithAlpha(colors.text.muted, 0.1),
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={item.icon}
+                  size={24}
+                  color={item.unlocked ? colors.accent.primary : colors.text.muted}
+                />
+              </View>
+
+              <View style={styles.badgeContent}>
+                <View style={styles.badgeTitleRow}>
+                  <AppText
+                    variant="h3"
+                    style={[
+                      styles.badgeTitle,
+                      !item.unlocked && { color: colors.text.muted },
+                    ]}
+                  >
+                    {item.title}
+                  </AppText>
+                  <Badge
+                    label={`+${item.xpReward} XP`}
+                    variant={item.unlocked ? item.badgeTint : 'default'}
+                  />
+                </View>
+
+                <AppText variant="bodySmall" muted numberOfLines={2}>
+                  {item.description}
+                </AppText>
+
+                {item.unlocked ? (
+                  <View style={styles.unlockedMetaRow}>
+                    <Ionicons name="checkmark-circle" size={14} color={colors.status.success} />
+                    <AppText variant="caption" style={{ color: colors.status.success, fontWeight: '600' }}>
+                      Unlocked {item.unlockedAt ? new Date(item.unlockedAt).toLocaleDateString() : 'Recently'}
+                    </AppText>
+                  </View>
+                ) : (
+                  <View style={styles.lockedMetaRow}>
+                    <Ionicons name="lock-closed-outline" size={13} color={colors.text.muted} />
+                    <AppText variant="caption" muted>
+                      Locked
+                    </AppText>
+                  </View>
+                )}
+              </View>
+            </View>
+          </Card>
+        ))}
+      </View>
     </View>
   );
 }
@@ -651,6 +808,46 @@ function StatTile({
       <AppText variant="caption" muted>
         {label}
       </AppText>
+    </Card>
+  );
+}
+
+function ContentLibraryCard() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
+  return (
+    <Card onPress={() => router.push('/content-library')}>
+      <View style={styles.cardHeaderRow}>
+        <Ionicons name="library-outline" size={18} color={colors.accent.primary} />
+        <View style={styles.flex}>
+          <AppText variant="h3">Offline Content Packs</AppText>
+          <AppText variant="caption" muted>
+            Manage installed curriculum, sizes &amp; database integrity
+          </AppText>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.text.muted} />
+      </View>
+    </Card>
+  );
+}
+
+function OnboardingTourCard() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
+  return (
+    <Card onPress={() => router.push('/onboarding')}>
+      <View style={styles.cardHeaderRow}>
+        <Ionicons name="sparkles-outline" size={18} color={colors.accent.primary} />
+        <View style={styles.flex}>
+          <AppText variant="h3">Onboarding &amp; Goals</AppText>
+          <AppText variant="caption" muted>
+            Customize your learning track, skill level, and daily goal
+          </AppText>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.text.muted} />
+      </View>
     </Card>
   );
 }
@@ -775,6 +972,17 @@ function NotificationPermissionSettings() {
     setPrefs(updated);
   };
 
+  const handleSelectReminderHour = async (hour: number, minute = 0) => {
+    const updated = await saveNotificationPreferences({
+      dailyReminderHour: hour,
+      dailyReminderMinute: minute,
+    });
+    setPrefs(updated);
+    if (updated.dailyReminderEnabled && permStatus === 'granted') {
+      await scheduleDailyStudyReminder();
+    }
+  };
+
   const handleSendTest = async () => {
     setTestResult(null);
     const res = await sendTestNotification();
@@ -784,6 +992,7 @@ function NotificationPermissionSettings() {
   };
 
   const isGranted = permStatus === 'granted';
+  const reminderTimeFormatted = `${(prefs.dailyReminderHour % 12) || 12}:${prefs.dailyReminderMinute.toString().padStart(2, '0')} ${prefs.dailyReminderHour >= 12 ? 'PM' : 'AM'}`;
 
   return (
     <Card>
@@ -829,7 +1038,7 @@ function NotificationPermissionSettings() {
           <View style={styles.notifToggleRow}>
             <View style={styles.flex}>
               <AppText variant="bodySmall" style={{ fontWeight: '600' }}>
-                Daily Study Reminder (7:00 PM)
+                Daily Study Reminder ({reminderTimeFormatted})
               </AppText>
               <AppText variant="caption" muted>
                 Prompt to solve 1 interactive challenge per day
@@ -842,6 +1051,47 @@ function NotificationPermissionSettings() {
               thumbColor="#FFFFFF"
             />
           </View>
+
+          {/* Time Picker Chips */}
+          {prefs.dailyReminderEnabled && (
+            <View style={styles.reminderTimeRow}>
+              <AppText variant="caption" muted style={{ marginBottom: 4 }}>
+                Reminder Schedule:
+              </AppText>
+              <View style={styles.reminderChipsGrid}>
+                {[
+                  { hour: 8, label: '8:00 AM' },
+                  { hour: 12, label: '12:00 PM' },
+                  { hour: 18, label: '6:00 PM' },
+                  { hour: 19, label: '7:00 PM' },
+                  { hour: 20, label: '8:00 PM' },
+                  { hour: 21, label: '9:00 PM' },
+                ].map((slot) => {
+                  const isSelected = prefs.dailyReminderHour === slot.hour;
+                  return (
+                    <Pressable
+                      key={slot.hour}
+                      onPress={() => handleSelectReminderHour(slot.hour, 0)}
+                      style={[
+                        styles.reminderChip,
+                        isSelected && styles.reminderChipActive,
+                      ]}
+                    >
+                      <AppText
+                        variant="caption"
+                        style={[
+                          styles.reminderChipText,
+                          isSelected && styles.reminderChipTextActive,
+                        ]}
+                      >
+                        {slot.label}
+                      </AppText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          )}
 
           <View style={styles.notifToggleRow}>
             <View style={styles.flex}>
@@ -1219,19 +1469,36 @@ function AppUpdateSettings() {
   );
 }
 
-function hexWithAlpha(hex: string, alpha: number): string {
-  const value = Math.round(alpha * 255)
-    .toString(16)
-    .padStart(2, '0');
-  return `${hex}${value}`;
-}
-
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     heroHeader: {
       gap: spacing.xs,
       paddingTop: spacing.xs,
       paddingBottom: spacing.sm,
+    },
+
+    heroHeaderTopRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+
+    themeToggleChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: spacing.sm + 2,
+      paddingVertical: 3,
+      borderRadius: radius.full,
+      backgroundColor: colors.surface.secondary,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+    },
+
+    themeToggleText: {
+      color: colors.text.primary,
+      fontWeight: '600',
+      fontSize: 11,
     },
 
     heroHeaderBadge: {
@@ -1259,6 +1526,122 @@ const makeStyles = (colors: ThemeColors) =>
 
     heroSubtitle: {
       lineHeight: 19,
+    },
+
+    reminderTimeRow: {
+      marginTop: spacing.xs,
+      marginBottom: spacing.xs,
+      paddingHorizontal: spacing.xs,
+    },
+
+    reminderChipsGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+
+    reminderChip: {
+      paddingHorizontal: spacing.sm + 2,
+      paddingVertical: 4,
+      borderRadius: radius.full,
+      backgroundColor: colors.surface.secondary,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+    },
+
+    reminderChipActive: {
+      backgroundColor: hexWithAlpha(colors.accent.primary, 0.15),
+      borderColor: colors.accent.primary,
+    },
+
+    reminderChipText: {
+      fontSize: 11,
+      color: colors.text.secondary,
+      fontWeight: '600',
+    },
+
+    reminderChipTextActive: {
+      color: colors.accent.primary,
+      fontWeight: '700',
+    },
+
+    badgeOverviewHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: spacing.sm,
+    },
+
+    badgeOverviewLeft: {
+      gap: 2,
+    },
+
+    badgeCountPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      borderRadius: radius.full,
+      backgroundColor: hexWithAlpha(colors.status.warning, 0.12),
+    },
+
+    badgeGrid: {
+      gap: spacing.sm,
+    },
+
+    badgeCard: {
+      padding: spacing.md,
+      borderRadius: radius.lg,
+    },
+
+    badgeCardLocked: {
+      opacity: 0.65,
+      backgroundColor: hexWithAlpha(colors.surface.secondary, 0.6),
+    },
+
+    badgeRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.md,
+    },
+
+    badgeIconBox: {
+      width: 48,
+      height: 48,
+      borderRadius: radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    badgeContent: {
+      flex: 1,
+      gap: 4,
+    },
+
+    badgeTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+
+    badgeTitle: {
+      flex: 1,
+    },
+
+    unlockedMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 2,
+    },
+
+    lockedMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      marginTop: 2,
     },
 
     heroCard: {

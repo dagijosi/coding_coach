@@ -95,6 +95,50 @@ export async function cancelDailyStudyReminder(): Promise<void> {
   }
 }
 
+const WEEKLY_REPORT_IDENTIFIER = 'weekly_progress_report';
+
+/**
+ * Schedules the recurring Sunday weekly progress summary report.
+ */
+export async function scheduleWeeklyReport(): Promise<boolean> {
+  try {
+    const status = await getSystemNotificationPermissionStatus();
+    if (status !== 'granted') return false;
+
+    await cancelWeeklyReport();
+
+    await Notifications.scheduleNotificationAsync({
+      identifier: WEEKLY_REPORT_IDENTIFIER,
+      content: {
+        title: '📊 Your Weekly Coding Summary',
+        body: 'Check out your XP gains, lesson mastery, and streak milestones this week!',
+        sound: true,
+        data: { screen: 'profile' },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+        weekday: 1, // Sunday
+        hour: 10,
+        minute: 0,
+        channelId: 'reminders',
+      },
+    });
+
+    return true;
+  } catch (error) {
+    console.warn('[notificationService] Failed to schedule weekly report:', error);
+    return false;
+  }
+}
+
+export async function cancelWeeklyReport(): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(WEEKLY_REPORT_IDENTIFIER);
+  } catch (error) {
+    console.warn('[notificationService] Failed to cancel weekly report:', error);
+  }
+}
+
 /**
  * Sends an immediate local test notification to verify system notification permissions and channel setup.
  */

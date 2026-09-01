@@ -9,7 +9,7 @@
 // Both use the app theme tokens (§18) and avoid heavy shadows/borders.
 // ---------------------------------------------------------------------------
 
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 
 import {
   radius,
@@ -38,6 +38,28 @@ export function CoachMessageBubble({
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
+  const handleLongPress = () => {
+    Alert.alert(
+      role === 'assistant' ? 'AI Coach Message' : 'Your Message',
+      undefined,
+      [
+        {
+          text: 'Share Message',
+          onPress: async () => {
+            try {
+              await Share.share({ message: text });
+            } catch {}
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
   if (role === 'system') {
     return (
       <View style={styles.systemWrap}>
@@ -53,11 +75,19 @@ export function CoachMessageBubble({
   if (role === 'user') {
     return (
       <View style={[styles.row, styles.rowUser]}>
-        <View style={[styles.user, { backgroundColor: colors.accent.primary }]}>
+        <Pressable
+          onLongPress={handleLongPress}
+          delayLongPress={350}
+          style={({ pressed }) => [
+            styles.user,
+            { backgroundColor: colors.accent.primary },
+            pressed && { opacity: 0.9 },
+          ]}
+        >
           <Text style={[styles.userText, { color: colors.text.inverse }]}>
             {text}
           </Text>
-        </View>
+        </Pressable>
         {showTimestamp && timestamp ? (
           <Text style={[styles.meta, { color: colors.text.muted }]}>
             {formatTime(timestamp)}
@@ -69,13 +99,21 @@ export function CoachMessageBubble({
 
   return (
     <View style={[styles.row, styles.rowCoach]}>
-      <View style={[styles.coach, { backgroundColor: colors.surface.secondary }]}>
+      <Pressable
+        onLongPress={handleLongPress}
+        delayLongPress={350}
+        style={({ pressed }) => [
+          styles.coach,
+          { backgroundColor: colors.surface.secondary },
+          pressed && { opacity: 0.9 },
+        ]}
+      >
         <CoachMarkdown
           content={text}
           color={colors.text.primary}
           codeColor={colors.accent.secondary}
         />
-      </View>
+      </Pressable>
       {showTimestamp && timestamp ? (
         <Text style={[styles.meta, { color: colors.text.muted }]}>
           {formatTime(timestamp)}

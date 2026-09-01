@@ -15,8 +15,8 @@ import {
   Card,
   EmptyState,
   ErrorState,
-  LoadingState,
   ProgressBar,
+  SkeletonCard,
 } from '@/components/ui';
 import { TabScreen } from '@/components/navigation';
 
@@ -27,6 +27,7 @@ import { getLessonProgressById } from '@/repositories/progressRepository';
 import type { Course, Difficulty } from '@/types/learning';
 import type { Lesson } from '@/types/lesson';
 import type { LessonProgress } from '@/types/learning';
+import { hexWithAlpha } from '@/utils/color';
 
 import {
   radius,
@@ -264,7 +265,11 @@ export default function LearnScreen() {
     return (
       <TabScreen>
         <HeaderHero />
-        <LoadingState message="Loading your curriculum..." />
+        <View style={{ marginTop: spacing.md }}>
+          <SkeletonCard rows={2} />
+          <SkeletonCard rows={3} />
+          <SkeletonCard rows={2} />
+        </View>
       </TabScreen>
     );
   }
@@ -652,13 +657,6 @@ function StatusBadge({
     return <Badge label="In progress" variant="warning" />;
   }
   return null;
-}
-
-function hexWithAlpha(hex: string, alpha: number): string {
-  const value = Math.round(alpha * 255)
-    .toString(16)
-    .padStart(2, '0');
-  return `${hex}${value}`;
 }
 
 const makeStyles = (colors: ThemeColors) =>

@@ -50,3 +50,18 @@ export async function getTopicsByCourse(
 
   return rows.map(mapTopic);
 }
+
+export async function getTopicById(topicId: string): Promise<Topic | null> {
+  const db = await getDatabase();
+
+  const row = await db.getFirstAsync<TopicRow>(
+    `
+      SELECT *
+      FROM topics
+      WHERE id = ?
+    `,
+    topicId
+  );
+
+  return row ? mapTopic(row) : null;
+}

@@ -402,20 +402,32 @@ function CoachHeader({
         </View>
       </View>
 
-      {hasMessages && (
+      <View style={styles.headerRightActions}>
         <Pressable
-          onPress={() => {
-            Keyboard.dismiss();
-            onClear();
-          }}
+          onPress={() => router.push('/coach-history')}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Start a new conversation"
+          accessibilityLabel="View conversation history"
           style={styles.clear}
         >
-          <Ionicons name="add-circle-outline" size={22} color={colors.text.secondary} />
+          <Ionicons name="time-outline" size={22} color={colors.text.secondary} />
         </Pressable>
-      )}
+
+        {hasMessages && (
+          <Pressable
+            onPress={() => {
+              Keyboard.dismiss();
+              onClear();
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Start a new conversation"
+            style={styles.clear}
+          >
+            <Ionicons name="add-circle-outline" size={22} color={colors.text.secondary} />
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -501,6 +513,11 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: 12,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    headerRightActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
     },
     clear: {
       width: 40,

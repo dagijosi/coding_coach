@@ -131,6 +131,36 @@ const MIGRATIONS: Record<number, Migration> = {
       VALUES (1, 0);
     `);
   },
+  // Phase 9 — Achievements, Bookmarks, and Spaced-Repetition Review Queue.
+  4: async (db) => {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS user_achievements (
+        id TEXT PRIMARY KEY NOT NULL,
+        unlocked_at TEXT NOT NULL,
+        metadata TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS saved_snippets (
+        id TEXT PRIMARY KEY NOT NULL,
+        title TEXT NOT NULL,
+        language TEXT NOT NULL,
+        code TEXT NOT NULL,
+        lesson_id TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS review_schedule (
+        id TEXT PRIMARY KEY NOT NULL,
+        item_id TEXT NOT NULL,
+        item_type TEXT NOT NULL,
+        interval_days INTEGER NOT NULL DEFAULT 1,
+        ease_factor REAL NOT NULL DEFAULT 2.5,
+        repetitions INTEGER NOT NULL DEFAULT 0,
+        due_at TEXT NOT NULL,
+        last_reviewed_at TEXT
+      );
+    `);
+  },
 };
 
 async function currentVersion(db: SQLiteDatabase): Promise<number> {

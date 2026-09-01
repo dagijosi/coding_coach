@@ -16,7 +16,7 @@
  * `PRAGMA user_version` and applies pending migrations to bring an install up
  * to date without destroying user progress.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const SCHEMA_TABLES: string[] = [
   'app_meta',
@@ -32,6 +32,9 @@ export const SCHEMA_TABLES: string[] = [
   'problem_attempts',
   'challenge_attempts',
   'user_progress',
+  'user_achievements',
+  'saved_snippets',
+  'review_schedule',
   'conversations',
   'conversation_messages',
   'github_account',
@@ -180,6 +183,35 @@ export const SCHEMA_SQL = `
     current_streak INTEGER NOT NULL DEFAULT 0,
     longest_streak INTEGER NOT NULL DEFAULT 0,
     last_activity_date TEXT
+  );
+
+  -- ---------------------- achievements & gamification ----------------------
+  CREATE TABLE IF NOT EXISTS user_achievements (
+    id TEXT PRIMARY KEY NOT NULL,
+    unlocked_at TEXT NOT NULL,
+    metadata TEXT
+  );
+
+  -- ---------------------- code snippet bookmarks ----------------------
+  CREATE TABLE IF NOT EXISTS saved_snippets (
+    id TEXT PRIMARY KEY NOT NULL,
+    title TEXT NOT NULL,
+    language TEXT NOT NULL,
+    code TEXT NOT NULL,
+    lesson_id TEXT,
+    created_at TEXT NOT NULL
+  );
+
+  -- ---------------------- spaced-repetition review queue ----------------------
+  CREATE TABLE IF NOT EXISTS review_schedule (
+    id TEXT PRIMARY KEY NOT NULL,
+    item_id TEXT NOT NULL,
+    item_type TEXT NOT NULL,
+    interval_days INTEGER NOT NULL DEFAULT 1,
+    ease_factor REAL NOT NULL DEFAULT 2.5,
+    repetitions INTEGER NOT NULL DEFAULT 0,
+    due_at TEXT NOT NULL,
+    last_reviewed_at TEXT
   );
 
   -- ---------------------- chatbot (Phase 7) ----------------------
