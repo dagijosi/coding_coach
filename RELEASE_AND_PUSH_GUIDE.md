@@ -68,8 +68,9 @@ Once you push a tag starting with `v` (like `v1.0.1`):
    - Creates a new release under:
      `https://github.com/dagijosi/coding_coach/releases`
    - Attaches `coding-coach.apk` directly to the release.
+   - **Saves Storage**: Automatically deletes older releases (keeps only the latest 2) so your GitHub storage stays well below 0.5 GB.
 3. **In-App Updater Notifies Users**:
-   - When users open the app and tap **"Check for Updates"** in the **Profile** tab, the app automatically finds `v1.0.1` and displays the **Download & Install APK** button.
+   - When users open the app and tap **"Check for Updates"** in the **Profile** tab, the app automatically finds the latest version and displays the **Download & Install APK** button.
 
 ---
 
