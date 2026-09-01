@@ -34,21 +34,21 @@ export default {
       [
         'expo-splash-screen',
         {
-          backgroundColor: '#FDFDFD',
-          image: './assets/splash-light.png',
-          imageWidth: 200,
-          resizeMode: 'cover',
+          backgroundColor: '#050C27',
+          image: './assets/icon.png',
+          imageWidth: 90,
+          resizeMode: 'contain',
           dark: {
             backgroundColor: '#050C27',
-            image: './assets/splash-dark.png',
+            image: './assets/icon.png',
           },
           android: {
-            backgroundColor: '#FDFDFD',
+            backgroundColor: '#050C27',
             image: './assets/icon.png',
-            imageWidth: 1,
+            imageWidth: 90,
             dark: {
               backgroundColor: '#050C27',
-              image: './assets/splash-icon.png',
+              image: './assets/icon.png',
             },
           },
         },

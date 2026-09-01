@@ -14,12 +14,10 @@ import { WebViewEngineHost } from '@/code/engine/WebViewEngineHost';
 import { ThemeProvider, useTheme } from '@/theme';
 import { BrandSplash } from '@/components/branding/BrandSplash';
 
-// Keep the native splash visible until the JS artwork is on screen so there is
-// no flash of the plain native background between boot and the branded splash.
-SplashScreen.preventAutoHideAsync();
+// Keep the native splash visible until the custom TSX splash mounts
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const SPLASH_MIN_DURATION_MS = 700;
-const SPLASH_FADE_DURATION_MS = 300;
+const SPLASH_FADE_DURATION_MS = 350;
 
 function ThemedApp() {
   return (
@@ -39,9 +37,9 @@ function ThemedApp() {
 
 function Boot() {
   const { resolvedMode } = useTheme();
-  const [ready, setReady] = useState(false);
-  const [minElapsed, setMinElapsed] = useState(false);
-  const [splashDone, setSplashDone] = useState(false);
+  const [dbReady, setDbReady] = useState(false);
+  const [splashFinished, setSplashFinished] = useState(false);
+  const [splashGone, setSplashGone] = useState(false);
   const fade = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -55,39 +53,33 @@ function Boot() {
           await repairDatabase();
         }
       } catch (error) {
-        console.error(
-          'Failed to initialize database:',
-          error
-        );
+        console.error('Failed to initialize database:', error);
       } finally {
-        setReady(true);
+        setDbReady(true);
       }
     }
 
     initialize();
   }, []);
 
-  useEffect(() => {
-    const timer = setTimeout(
-      () => setMinElapsed(true),
-      SPLASH_MIN_DURATION_MS
-    );
-    return () => clearTimeout(timer);
-  }, []);
+  const handleSplashFinish = () => {
+    setSplashFinished(true);
+  };
 
   useEffect(() => {
-    if (ready && minElapsed && !splashDone) {
+    // Fade out splash once database is initialized AND progress animation completes
+    if (dbReady && splashFinished && !splashGone) {
       Animated.timing(fade, {
         toValue: 0,
         duration: SPLASH_FADE_DURATION_MS,
         useNativeDriver: true,
       }).start(({ finished }) => {
         if (finished) {
-          setSplashDone(true);
+          setSplashGone(true);
         }
       });
     }
-  }, [ready, minElapsed, splashDone, fade]);
+  }, [dbReady, splashFinished, splashGone, fade]);
 
   return (
     <>
@@ -95,14 +87,14 @@ function Boot() {
         style={resolvedMode === 'light' ? 'dark' : 'light'}
       />
 
-      {ready ? <ThemedApp key="app" /> : null}
+      {dbReady ? <ThemedApp key="app" /> : null}
 
-      {!splashDone && (
+      {!splashGone && (
         <Animated.View
           style={[StyleSheet.absoluteFill, { opacity: fade }]}
           pointerEvents="auto"
         >
-          <BrandSplash />
+          <BrandSplash onFinish={handleSplashFinish} />
         </Animated.View>
       )}
     </>
