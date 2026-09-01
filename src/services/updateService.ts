@@ -1,5 +1,8 @@
 import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
+import * as FileSystem from 'expo-file-system';
+import * as IntentLauncher from 'expo-intent-launcher';
+import { Platform } from 'react-native';
 
 export type ReleaseInfo = {
   hasUpdate: boolean;
@@ -13,9 +16,28 @@ export type ReleaseInfo = {
   htmlUrl: string;
 };
 
+export type DownloadProgress = {
+  percent: number; // 0 to 1
+  totalBytesWritten: number;
+  totalBytesExpectedToWrite: number;
+  formattedProgress: string; // e.g. "12.4 MB / 52.8 MB (23%)"
+};
+
+export type DownloadProgressCallback = (progress: DownloadProgress) => void;
+
 const REPO_OWNER = 'dagijosi';
 const REPO_NAME = 'coding_coach';
 const GITHUB_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
+const LOCAL_APK_NAME = 'coding-coach-update.apk';
+
+let activeDownload: FileSystem.DownloadResumable | null = null;
+
+/**
+ * Returns the current runtime app version declared in app.config.ts / Constants.
+ */
+export function getCurrentAppVersion(): string {
+  return Constants.expoConfig?.version ?? '1.0.4';
+}
 
 /**
  * Parses and cleans release notes so users see readable change summaries
@@ -67,8 +89,7 @@ export function extractChangelogUrl(body: string | undefined | null, htmlUrl: st
 }
 
 export async function checkAppUpdates(): Promise<ReleaseInfo> {
-  const currentVersion =
-    Constants.expoConfig?.version ?? '1.0.0';
+  const currentVersion = getCurrentAppVersion();
 
   try {
     const response = await fetch(GITHUB_API_URL, {
@@ -144,9 +165,105 @@ export async function checkAppUpdates(): Promise<ReleaseInfo> {
 }
 
 /**
- * Directly attempts to open the APK download URL or fallback URL.
- * Note: Linking.canOpenURL is intentionally avoided for standard web URLs
- * as it returns false on Android 11+ without explicit package queries.
+ * Downloads the APK directly inside the app with progress updates,
+ * then triggers Android native package installer automatically.
+ */
+export async function downloadAndInstallApk(
+  downloadUrl: string,
+  onProgress?: DownloadProgressCallback
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const localUri = `${FileSystem.documentDirectory}${LOCAL_APK_NAME}`;
+
+    // Clean up any stale incomplete download
+    const info = await FileSystem.getInfoAsync(localUri);
+    if (info.exists) {
+      await FileSystem.deleteAsync(localUri, { idempotent: true });
+    }
+
+    const callback = (dp: FileSystem.DownloadProgressData) => {
+      const progress =
+        dp.totalBytesExpectedToWrite > 0
+          ? dp.totalBytesWritten / dp.totalBytesExpectedToWrite
+          : 0;
+
+      const writtenMb = (dp.totalBytesWritten / (1024 * 1024)).toFixed(1);
+      const totalMb =
+        dp.totalBytesExpectedToWrite > 0
+          ? (dp.totalBytesExpectedToWrite / (1024 * 1024)).toFixed(1)
+          : '?';
+
+      const percent = Math.min(1, Math.max(0, progress));
+
+      onProgress?.({
+        percent,
+        totalBytesWritten: dp.totalBytesWritten,
+        totalBytesExpectedToWrite: dp.totalBytesExpectedToWrite,
+        formattedProgress: `${writtenMb} MB / ${totalMb} MB (${Math.round(percent * 100)}%)`,
+      });
+    };
+
+    activeDownload = FileSystem.createDownloadResumable(
+      downloadUrl,
+      localUri,
+      {},
+      callback
+    );
+
+    const result = await activeDownload.downloadAsync();
+    if (!result || !result.uri) {
+      throw new Error('APK download was interrupted.');
+    }
+
+    // Launch Android Package Installer
+    return await installDownloadedApk(result.uri);
+  } catch (error) {
+    console.error('[updateService] Download or install failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unable to complete update download.',
+    };
+  } finally {
+    activeDownload = null;
+  }
+}
+
+/**
+ * Launches the native Android package installer for a local file URI.
+ */
+export async function installDownloadedApk(
+  fileUri?: string
+): Promise<{ success: boolean; error?: string }> {
+  const targetUri = fileUri ?? `${FileSystem.documentDirectory}${LOCAL_APK_NAME}`;
+
+  try {
+    const fileInfo = await FileSystem.getInfoAsync(targetUri);
+    if (!fileInfo.exists) {
+      return { success: false, error: 'Downloaded update file not found.' };
+    }
+
+    if (Platform.OS === 'android') {
+      const contentUri = await FileSystem.getContentUriAsync(targetUri);
+      await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+        data: contentUri,
+        flags: 1, // Intent.FLAG_GRANT_READ_URI_PERMISSION
+        type: 'application/vnd.android.package-archive',
+      });
+      return { success: true };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[updateService] Failed to launch installer:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Could not launch package installer.',
+    };
+  }
+}
+
+/**
+ * Fallback browser download.
  */
 export async function openDownloadUrl(url: string | null, fallbackUrl?: string | null): Promise<boolean> {
   const target = url || fallbackUrl;
@@ -193,4 +310,3 @@ export function isNewerVersion(remote: string, current: string): boolean {
 
   return false;
 }
-

@@ -49,7 +49,11 @@ import {
 } from '@/theme';
 import {
   checkAppUpdates,
+  downloadAndInstallApk,
+  getCurrentAppVersion,
+  installDownloadedApk,
   openDownloadUrl,
+  type DownloadProgress,
   type ReleaseInfo,
 } from '@/services/updateService';
 
@@ -698,13 +702,20 @@ function GitHubSettings() {
 function AppUpdateSettings() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+
   const [checking, setChecking] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+  const [downloadComplete, setDownloadComplete] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [info, setInfo] = useState<ReleaseInfo | null>(null);
   const [checked, setChecked] = useState(false);
 
+  const currentVersion = getCurrentAppVersion();
+
   const handleCheck = async () => {
     setChecking(true);
+    setDownloadError(null);
     try {
       const res = await checkAppUpdates();
       setInfo(res);
@@ -714,25 +725,36 @@ function AppUpdateSettings() {
     }
   };
 
-  const handleDownload = async () => {
-    if (!info) return;
+  const handleDownloadAndInstall = async () => {
+    if (!info?.downloadUrl) return;
+
     setDownloading(true);
-    try {
-      const ok = await openDownloadUrl(info.downloadUrl, info.htmlUrl);
-      if (!ok) {
-        Alert.alert(
-          'Download APK',
-          'Could not automatically start download. Please visit GitHub Releases to download the APK.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open GitHub', onPress: () => openDownloadUrl(info.htmlUrl) },
-          ]
-        );
-      }
-    } catch {
-      Alert.alert('Error', 'Unable to open download URL.');
-    } finally {
-      setDownloading(false);
+    setDownloadError(null);
+    setDownloadComplete(false);
+    setDownloadProgress({
+      percent: 0,
+      totalBytesWritten: 0,
+      totalBytesExpectedToWrite: 0,
+      formattedProgress: 'Starting download...',
+    });
+
+    const res = await downloadAndInstallApk(info.downloadUrl, (progress) => {
+      setDownloadProgress(progress);
+    });
+
+    setDownloading(false);
+
+    if (res.success) {
+      setDownloadComplete(true);
+    } else {
+      setDownloadError(res.error ?? 'Download failed. Please try again.');
+    }
+  };
+
+  const handleReinstall = async () => {
+    const res = await installDownloadedApk();
+    if (!res.success) {
+      setDownloadError(res.error ?? 'Could not launch package installer.');
     }
   };
 
@@ -754,14 +776,14 @@ function AppUpdateSettings() {
               Coding Coach
             </AppText>
             <AppText variant="caption" muted>
-              Current Version: v{info?.currentVersion ?? '1.0.2'}
+              Current Version: v{currentVersion}
             </AppText>
           </View>
           <Button
             title={checking ? 'Checking...' : 'Check Updates'}
             variant="secondary"
             loading={checking}
-            disabled={checking}
+            disabled={checking || downloading}
             onPress={handleCheck}
           />
         </View>
@@ -800,27 +822,87 @@ function AppUpdateSettings() {
                   </View>
                 ) : null}
 
-                <View style={styles.updateActions}>
-                  <Button
-                    title={downloading ? 'Starting download...' : `Download APK (v${info.latestVersion})`}
-                    variant="success"
-                    loading={downloading}
-                    disabled={downloading}
-                    onPress={handleDownload}
-                  />
-
-                  {info.changelogUrl ? (
-                    <Pressable
-                      style={styles.changelogLink}
-                      onPress={() => openDownloadUrl(info.changelogUrl)}
-                      accessibilityRole="button"
-                    >
-                      <Ionicons name="open-outline" size={14} color={colors.accent.primary} />
-                      <AppText variant="caption" style={{ color: colors.accent.primary, fontWeight: '600' }}>
-                        View Full Changelog on GitHub
+                {/* In-App Live Download Progress */}
+                {downloading && (
+                  <View style={styles.downloadProgressWrap}>
+                    <View style={styles.downloadProgressHeader}>
+                      <Ionicons name="cloud-download" size={16} color={colors.accent.primary} />
+                      <AppText variant="bodySmall" style={{ fontWeight: '600', color: colors.accent.primary }}>
+                        {downloadProgress?.formattedProgress ?? 'Downloading APK...'}
                       </AppText>
-                    </Pressable>
-                  ) : null}
+                    </View>
+                    <ProgressBar progress={downloadProgress?.percent ?? 0} />
+                  </View>
+                )}
+
+                {/* Download Complete Status */}
+                {downloadComplete && (
+                  <View style={styles.downloadCompleteCard}>
+                    <Ionicons name="checkmark-circle" size={18} color={colors.status.success} />
+                    <AppText variant="bodySmall" style={{ color: colors.status.success, fontWeight: '600', flex: 1 }}>
+                      APK downloaded! Installer opened.
+                    </AppText>
+                  </View>
+                )}
+
+                {/* Download Error */}
+                {downloadError && (
+                  <View style={styles.downloadErrorCard}>
+                    <Ionicons name="alert-circle" size={18} color={colors.status.error} />
+                    <AppText variant="caption" style={{ color: colors.status.error, flex: 1 }}>
+                      {downloadError}
+                    </AppText>
+                  </View>
+                )}
+
+                <View style={styles.updateActions}>
+                  {downloadComplete ? (
+                    <Button
+                      title="Install APK Now"
+                      variant="success"
+                      onPress={handleReinstall}
+                    />
+                  ) : (
+                    <Button
+                      title={
+                        downloading
+                          ? `Downloading (${Math.round((downloadProgress?.percent ?? 0) * 100)}%)...`
+                          : `Download & Update (v${info.latestVersion})`
+                      }
+                      variant="success"
+                      loading={downloading}
+                      disabled={downloading}
+                      onPress={handleDownloadAndInstall}
+                    />
+                  )}
+
+                  <View style={styles.updateLinksRow}>
+                    {info.downloadUrl ? (
+                      <Pressable
+                        style={styles.changelogLink}
+                        onPress={() => openDownloadUrl(info.downloadUrl)}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="open-outline" size={13} color={colors.text.muted} />
+                        <AppText variant="caption" muted>
+                          Download via Browser
+                        </AppText>
+                      </Pressable>
+                    ) : null}
+
+                    {info.changelogUrl ? (
+                      <Pressable
+                        style={styles.changelogLink}
+                        onPress={() => openDownloadUrl(info.changelogUrl)}
+                        accessibilityRole="button"
+                      >
+                        <Ionicons name="logo-github" size={13} color={colors.text.muted} />
+                        <AppText variant="caption" muted>
+                          View Changelog
+                        </AppText>
+                      </Pressable>
+                    ) : null}
+                  </View>
                 </View>
               </View>
             ) : (
@@ -832,7 +914,7 @@ function AppUpdateSettings() {
                     color={colors.status.success}
                   />
                   <AppText variant="bodySmall" muted>
-                    You are on the latest version (v{info.currentVersion}).
+                    You are on the latest version (v{currentVersion}).
                   </AppText>
                 </View>
               </View>
@@ -1194,6 +1276,50 @@ const makeStyles = (colors: ThemeColors) =>
 
     updateActions: {
       gap: spacing.sm,
+      marginTop: spacing.xs,
+    },
+
+    downloadProgressWrap: {
+      gap: spacing.xs,
+      padding: spacing.sm,
+      backgroundColor: colors.surface.primary,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+    },
+
+    downloadProgressHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+
+    downloadCompleteCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      padding: spacing.sm,
+      backgroundColor: hexWithAlpha(colors.status.success, 0.1),
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.status.success,
+    },
+
+    downloadErrorCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      padding: spacing.sm,
+      backgroundColor: hexWithAlpha(colors.status.error, 0.1),
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.status.error,
+    },
+
+    updateLinksRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-around',
       marginTop: spacing.xs,
     },
 
