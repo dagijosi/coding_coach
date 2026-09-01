@@ -497,8 +497,18 @@ function IntroStep({ lesson }: { lesson: Lesson }) {
   return (
     <FadeInView style={styles.stepContent}>
       <View style={[styles.stepHero, { borderLeftColor: accentColor }]}>
-        <AppText variant="h1">{lesson.title}</AppText>
-        <AppText muted style={styles.stepHeroDesc}>
+        <View style={styles.heroBadgeRow}>
+          <Badge label={lesson.difficulty.toUpperCase()} variant={badgeVariant(lesson.difficulty)} />
+          <View style={styles.heroLangPill}>
+            <Ionicons name="code-slash" size={12} color={colors.accent.primary} />
+            <AppText variant="caption" style={styles.heroLangText}>
+              {lesson.language}
+            </AppText>
+          </View>
+        </View>
+
+        <AppText variant="h1" style={styles.heroTitle}>{lesson.title}</AppText>
+        <AppText variant="body" muted style={styles.stepHeroDesc}>
           {lesson.description}
         </AppText>
 
@@ -513,21 +523,7 @@ function IntroStep({ lesson }: { lesson: Lesson }) {
               <Ionicons name="time-outline" size={16} color={accentColor} />
             </View>
             <AppText variant="bodySmall" muted>
-              {lesson.estimatedMinutes} min
-            </AppText>
-          </View>
-
-          <View style={styles.metadataItem}>
-            <View
-              style={[
-                styles.metadataIcon,
-                { backgroundColor: accentColor + '22' },
-              ]}
-            >
-              <Ionicons name="code-slash-outline" size={16} color={accentColor} />
-            </View>
-            <AppText variant="bodySmall" muted>
-              {lesson.language}
+              {lesson.estimatedMinutes} min estimated
             </AppText>
           </View>
         </View>
@@ -536,7 +532,7 @@ function IntroStep({ lesson }: { lesson: Lesson }) {
       <StepPrologue
         icon="play-circle-outline"
         title="Ready to learn?"
-        text="You'll explore the core ideas, see examples, try some code yourself, and finish with a short exercise."
+        text="You'll explore the core ideas, see live examples, experiment with code, and solve exercises."
       />
     </FadeInView>
   );
@@ -729,12 +725,12 @@ function TryItStep({
             {config.params.map((param, pIdx) => {
               const currentVal = currentArgs[pIdx] ?? param.defaultValue;
               return (
-                <View key={param.name} style={styles.paramRow}>
+                <View key={param.name} style={styles.paramCard}>
                   <View style={styles.paramMeta}>
                     <AppText variant="caption" style={styles.paramName}>
                       {param.name}:
                     </AppText>
-                    <AppText variant="caption" muted>
+                    <AppText variant="caption" muted style={styles.paramLabel}>
                       {param.label}
                     </AppText>
                   </View>
@@ -783,11 +779,12 @@ function TryItStep({
       <View style={styles.editorContainer}>
         <View style={styles.editorHeader}>
           <View style={styles.editorHeaderLeft}>
+            <Ionicons name="code-slash" size={13} color={colors.accent.secondary} />
             <AppText variant="caption" style={styles.editorLang}>
               JavaScript
             </AppText>
-            <AppText variant="caption" muted style={styles.callPreview}>
-              will run {callSignature}
+            <AppText variant="caption" muted style={styles.callPreview} numberOfLines={1}>
+              · will run {callSignature}
             </AppText>
           </View>
           <EngineBadge status={engineStatus} compact />
@@ -799,7 +796,7 @@ function TryItStep({
       <View style={styles.tryItActions}>
         <View style={styles.tryItMainBtn}>
           <Button
-            title={running ? 'Running...' : `Run ${callSignature}`}
+            title={running ? 'Running...' : 'Run Code'}
             loading={running}
             disabled={running}
             onPress={run}
@@ -1686,17 +1683,47 @@ const makeStyles = (colors: ThemeColors) =>
       borderLeftWidth: 3,
       backgroundColor: colors.surface.primary,
       borderRadius: radius.lg,
+      gap: spacing.xs,
       ...shadows.medium,
     },
 
+    heroBadgeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      marginBottom: spacing.xs,
+    },
+
+    heroLangPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 2,
+      borderRadius: radius.full,
+      backgroundColor: colors.accent.soft,
+    },
+
+    heroLangText: {
+      color: colors.accent.primary,
+      fontWeight: '700',
+      fontSize: 11,
+    },
+
+    heroTitle: {
+      letterSpacing: -0.4,
+      lineHeight: 32,
+    },
+
     stepHeroDesc: {
-      marginTop: spacing.sm,
+      marginTop: spacing.xs,
+      lineHeight: 22,
     },
 
     metadata: {
       flexDirection: 'row',
       gap: spacing.lg,
-      marginTop: spacing.lg,
+      marginTop: spacing.md,
     },
 
     metadataItem: {
@@ -1714,13 +1741,15 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     sectionTitle: {
-      gap: spacing.xs,
+      gap: 4,
+      marginBottom: spacing.xs,
     },
 
     sectionTitleRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
+      flexWrap: 'wrap',
     },
 
     conceptCard: {
@@ -1749,6 +1778,7 @@ const makeStyles = (colors: ThemeColors) =>
 
     conceptSummary: {
       marginTop: spacing.xs,
+      lineHeight: 20,
     },
 
     prologue: {
@@ -1774,7 +1804,7 @@ const makeStyles = (colors: ThemeColors) =>
 
     textBlock: {
       color: colors.text.secondary,
-      lineHeight: typography.body.lineHeight,
+      lineHeight: 24,
     },
 
     codeCard: {
@@ -1823,6 +1853,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderBottomWidth: 1,
       borderBottomColor: colors.border.default,
       backgroundColor: colors.background.tertiary,
+      gap: spacing.xs,
     },
 
     editorLang: {
@@ -1844,7 +1875,7 @@ const makeStyles = (colors: ThemeColors) =>
     conceptNoteText: {
       flex: 1,
       color: colors.text.primary,
-      lineHeight: 18,
+      lineHeight: 20,
     },
 
     paramsCard: {
@@ -1871,18 +1902,20 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing.sm,
     },
 
-    paramRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: spacing.sm,
+    paramCard: {
+      gap: spacing.xs,
+      padding: spacing.sm,
+      backgroundColor: colors.surface.secondary,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border.default,
     },
 
     paramMeta: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.xs,
-      flex: 1,
+      flexWrap: 'wrap',
     },
 
     paramName: {
@@ -1891,24 +1924,30 @@ const makeStyles = (colors: ThemeColors) =>
       fontFamily: typography.code.fontFamily,
     },
 
+    paramLabel: {
+      flexShrink: 1,
+    },
+
     paramOptions: {
       flexDirection: 'row',
       alignItems: 'center',
+      flexWrap: 'wrap',
       gap: spacing.xs,
+      marginTop: 2,
     },
 
     paramPill: {
       paddingHorizontal: spacing.sm,
-      paddingVertical: 4,
+      paddingVertical: 5,
       borderRadius: radius.sm,
       borderWidth: 1,
       borderColor: colors.border.default,
-      backgroundColor: colors.surface.secondary,
+      backgroundColor: colors.surface.primary,
     },
 
     paramPillActive: {
       paddingHorizontal: spacing.sm,
-      paddingVertical: 4,
+      paddingVertical: 5,
       borderRadius: radius.sm,
       borderWidth: 1,
       borderColor: colors.accent.primary,
@@ -1930,12 +1969,16 @@ const makeStyles = (colors: ThemeColors) =>
     editorHeaderLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.sm,
+      gap: spacing.xs,
+      flex: 1,
+      flexShrink: 1,
+      overflow: 'hidden',
     },
 
     callPreview: {
       fontFamily: typography.code.fontFamily,
       fontSize: 11,
+      flexShrink: 1,
     },
 
     tryItActions: {
