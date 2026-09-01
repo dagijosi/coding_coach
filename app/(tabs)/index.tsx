@@ -205,13 +205,16 @@ export default function HomeScreen() {
     <TabScreen>
       {/* Greeting */}
       <View style={styles.header}>
-        <View style={{ gap: spacing.xs }}>
-          <AppText variant="caption" muted>
-            {greeting()}
-          </AppText>
-          <AppText variant="h1">Coding Coach</AppText>
-          <AppText variant="bodySmall" muted>
-            Keep building your coding skills.
+        <View style={{ gap: 3, flex: 1 }}>
+          <View style={styles.heroBadge}>
+            <Ionicons name="sparkles" size={12} color={colors.accent.primary} />
+            <AppText variant="caption" style={styles.heroBadgeText}>
+              {greeting().toUpperCase()}
+            </AppText>
+          </View>
+          <AppText variant="h1" style={styles.heroTitle}>Coding Coach</AppText>
+          <AppText variant="bodySmall" muted style={styles.heroSubtitle}>
+            Continue your developer journey today.
           </AppText>
         </View>
 
@@ -223,11 +226,11 @@ export default function HomeScreen() {
         >
           <Ionicons
             name="flame"
-            size={20}
+            size={18}
             color={colors.status.warning}
           />
           <AppText variant="body" style={styles.streakText}>
-            {streak}
+            {streak}d
           </AppText>
         </Animated.View>
       </View>
@@ -493,7 +496,36 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'flex-start',
-      marginBottom: spacing.xl,
+      gap: spacing.md,
+      marginBottom: spacing.lg,
+      paddingTop: spacing.xs,
+    },
+
+    heroBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 5,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 3,
+      borderRadius: radius.full,
+      backgroundColor: colors.accent.soft,
+      marginBottom: 2,
+    },
+
+    heroBadgeText: {
+      color: colors.accent.primary,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      fontSize: 10,
+    },
+
+    heroTitle: {
+      letterSpacing: -0.4,
+    },
+
+    heroSubtitle: {
+      lineHeight: 19,
     },
 
     streak: {

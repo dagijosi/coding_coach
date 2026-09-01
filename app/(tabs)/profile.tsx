@@ -12,7 +12,6 @@ import {
   ErrorState,
   LoadingState,
   ProgressBar,
-  SectionHeader,
 } from '@/components/ui';
 import { TabScreen } from '@/components/navigation';
 
@@ -41,7 +40,6 @@ import {
   radius,
   shadows,
   spacing,
-  typography,
   useTheme,
   useThemedStyles,
   type ThemeColors,
@@ -230,6 +228,7 @@ export default function ProgressScreen() {
   if (error) {
     return (
       <TabScreen scroll={false}>
+        <HeaderHero />
         <ErrorState
           full
           title="Couldn't load your profile"
@@ -242,6 +241,7 @@ export default function ProgressScreen() {
   if (!data) {
     return (
       <TabScreen scroll={false}>
+        <HeaderHero />
         <LoadingState full message="Loading your dashboard..." />
       </TabScreen>
     );
@@ -256,12 +256,8 @@ export default function ProgressScreen() {
 
   return (
     <TabScreen>
-      {/* Top Header */}
-      <SectionHeader
-        title="Profile & Dashboard"
-        subtitle="Track your XP, mastery growth and learning activity."
-        icon="person-circle-outline"
-      />
+      {/* Modern Hero Header */}
+      <HeaderHero />
 
       {/* Hero Profile Card */}
       <Card style={styles.heroCard}>
@@ -314,14 +310,14 @@ export default function ProgressScreen() {
         {/* Quick Mini Badges */}
         <View style={styles.miniBadgesRow}>
           <View style={styles.miniBadgeItem}>
-            <Ionicons name="flame" size={16} color={colors.status.warning} />
+            <Ionicons name="flame" size={17} color={colors.status.warning} />
             <AppText variant="caption" style={styles.miniBadgeValue}>
               {progression.currentStreak}d Streak
             </AppText>
           </View>
           <View style={styles.miniBadgeDivider} />
           <View style={styles.miniBadgeItem}>
-            <Ionicons name="trophy" size={16} color={colors.status.info} />
+            <Ionicons name="trophy" size={17} color={colors.status.info} />
             <AppText variant="caption" style={styles.miniBadgeValue}>
               {progression.longestStreak}d Best
             </AppText>
@@ -330,7 +326,7 @@ export default function ProgressScreen() {
           <View style={styles.miniBadgeItem}>
             <Ionicons
               name={progression.hasActivityToday ? 'checkmark-circle' : 'time-outline'}
-              size={16}
+              size={17}
               color={progression.hasActivityToday ? colors.status.success : colors.text.muted}
             />
             <AppText variant="caption" style={styles.miniBadgeValue}>
@@ -422,12 +418,12 @@ export default function ProgressScreen() {
             <View style={styles.topicHighlights}>
               {overall.strongestTopic ? (
                 <View style={styles.highlightItem}>
-                  <Ionicons name="trending-up" size={16} color={colors.status.success} />
+                  <Ionicons name="trending-up" size={17} color={colors.status.success} />
                   <View style={styles.flex}>
                     <AppText variant="caption" muted>
                       Strongest Area
                     </AppText>
-                    <AppText variant="bodySmall" numberOfLines={1}>
+                    <AppText variant="bodySmall" style={{ fontWeight: '600' }} numberOfLines={1}>
                       {overall.strongestTopic.topicName} ({overall.strongestTopic.masteryScore}%)
                     </AppText>
                   </View>
@@ -436,12 +432,12 @@ export default function ProgressScreen() {
 
               {overall.weakestTopic ? (
                 <View style={styles.highlightItem}>
-                  <Ionicons name="trending-down" size={16} color={colors.status.warning} />
+                  <Ionicons name="trending-down" size={17} color={colors.status.warning} />
                   <View style={styles.flex}>
                     <AppText variant="caption" muted>
                       Focus Area
                     </AppText>
-                    <AppText variant="bodySmall" numberOfLines={1}>
+                    <AppText variant="bodySmall" style={{ fontWeight: '600' }} numberOfLines={1}>
                       {overall.weakestTopic.topicName} ({overall.weakestTopic.masteryScore}%)
                     </AppText>
                   </View>
@@ -453,7 +449,7 @@ export default function ProgressScreen() {
           {/* Topic Progress List */}
           <Card>
             <View style={styles.cardHeaderRow}>
-              <Ionicons name="layers-outline" size={18} color={colors.accent.secondary} />
+              <Ionicons name="layers-outline" size={19} color={colors.accent.secondary} />
               <AppText variant="h3" style={styles.flex}>
                 Topic Mastery Breakdown
               </AppText>
@@ -484,7 +480,7 @@ export default function ProgressScreen() {
                         <AppText variant="caption" muted>
                           {topic.lessonsCompleted} of {topic.lessonsTotal} lessons
                         </AppText>
-                        <AppText variant="caption" style={{ color: colors.accent.primary, fontWeight: '600' }}>
+                        <AppText variant="caption" style={{ color: colors.accent.primary, fontWeight: '700' }}>
                           {topic.masteryScore}% Mastery
                         </AppText>
                       </View>
@@ -597,6 +593,28 @@ export default function ProgressScreen() {
   );
 }
 
+function HeaderHero() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
+  return (
+    <View style={styles.heroHeader}>
+      <View style={styles.heroHeaderBadge}>
+        <Ionicons name="person-circle" size={13} color={colors.accent.primary} />
+        <AppText variant="caption" style={styles.heroBadgeText}>
+          DEVELOPER PROFILE
+        </AppText>
+      </View>
+      <AppText variant="h1" style={styles.heroTitle}>
+        Your Profile &amp; Stats
+      </AppText>
+      <AppText variant="bodySmall" muted style={styles.heroSubtitle}>
+        Track your XP growth, mastery analytics, and update preferences.
+      </AppText>
+    </View>
+  );
+}
+
 function StatTile({
   icon,
   color,
@@ -652,13 +670,13 @@ function AppearanceSettings() {
             >
               <Ionicons
                 name={option.icon}
-                size={18}
+                size={19}
                 color={active ? colors.accent.primary : colors.text.muted}
               />
               <AppText
                 style={[
                   styles.flex,
-                  active && { color: colors.accent.primary, fontWeight: '600' },
+                  active && { color: colors.accent.primary, fontWeight: '700' },
                 ]}
               >
                 {option.label}
@@ -935,9 +953,43 @@ function hexWithAlpha(hex: string, alpha: number): string {
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    heroHeader: {
+      gap: spacing.xs,
+      paddingTop: spacing.xs,
+      paddingBottom: spacing.sm,
+    },
+
+    heroHeaderBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 5,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 3,
+      borderRadius: radius.full,
+      backgroundColor: colors.accent.soft,
+      marginBottom: 2,
+    },
+
+    heroBadgeText: {
+      color: colors.accent.primary,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      fontSize: 10,
+    },
+
+    heroTitle: {
+      letterSpacing: -0.4,
+    },
+
+    heroSubtitle: {
+      lineHeight: 19,
+    },
+
     heroCard: {
       gap: spacing.md,
       marginTop: spacing.xs,
+      padding: spacing.lg,
     },
 
     heroTop: {
@@ -951,8 +1003,8 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     avatar: {
-      width: 64,
-      height: 64,
+      width: 66,
+      height: 66,
       borderRadius: radius.full,
       backgroundColor: hexWithAlpha(colors.accent.primary, 0.16),
       borderWidth: 2,
@@ -980,7 +1032,7 @@ const makeStyles = (colors: ThemeColors) =>
 
     heroInfo: {
       flex: 1,
-      gap: 2,
+      gap: 3,
     },
 
     nameRow: {
@@ -1014,7 +1066,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       justifyContent: 'space-around',
       marginTop: spacing.xs,
-      paddingTop: spacing.sm,
+      paddingTop: spacing.md,
       borderTopWidth: 1,
       borderTopColor: hexWithAlpha(colors.border.default, 0.6),
     },
@@ -1022,28 +1074,30 @@ const makeStyles = (colors: ThemeColors) =>
     miniBadgeItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 4,
+      gap: 5,
     },
 
     miniBadgeDivider: {
       width: 1,
-      height: 16,
+      height: 18,
       backgroundColor: colors.border.default,
     },
 
     miniBadgeValue: {
       fontWeight: '600',
       color: colors.text.secondary,
+      fontSize: 12,
     },
 
     tabSwitcher: {
       flexDirection: 'row',
       backgroundColor: colors.surface.secondary,
-      borderRadius: radius.lg,
+      borderRadius: radius.xl,
       padding: 4,
       marginTop: spacing.md,
       marginBottom: spacing.sm,
       gap: 4,
+      ...shadows.small,
     },
 
     tabBtn: {
@@ -1051,9 +1105,9 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 5,
-      paddingVertical: spacing.sm,
-      borderRadius: radius.md,
+      gap: 6,
+      paddingVertical: spacing.sm + 2,
+      borderRadius: radius.lg,
     },
 
     tabBtnActive: {
@@ -1096,16 +1150,17 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     tileIconBox: {
-      width: 36,
-      height: 36,
+      width: 38,
+      height: 38,
       borderRadius: radius.md,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 2,
+      marginBottom: 3,
     },
 
     masteryCard: {
       gap: spacing.sm,
+      padding: spacing.lg,
     },
 
     masteryBar: {
@@ -1113,9 +1168,9 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     topicHighlights: {
-      gap: spacing.sm,
-      marginTop: spacing.xs,
-      paddingTop: spacing.xs,
+      gap: spacing.md,
+      marginTop: spacing.sm,
+      paddingTop: spacing.md,
       borderTopWidth: 1,
       borderTopColor: hexWithAlpha(colors.border.default, 0.6),
     },
@@ -1123,7 +1178,7 @@ const makeStyles = (colors: ThemeColors) =>
     highlightItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.sm,
+      gap: spacing.md,
     },
 
     topicList: {
@@ -1132,7 +1187,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     topicRow: {
-      gap: 4,
+      gap: 6,
     },
 
     topicNameRow: {
@@ -1153,20 +1208,20 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     insightList: {
-      gap: spacing.sm,
+      gap: spacing.md,
       marginTop: spacing.sm,
     },
 
     insightRow: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      gap: spacing.sm,
+      gap: spacing.md,
       paddingVertical: 2,
     },
 
     insightIconBox: {
-      width: 24,
-      height: 24,
+      width: 28,
+      height: 28,
       borderRadius: radius.full,
       backgroundColor: colors.accent.soft,
       alignItems: 'center',
@@ -1176,24 +1231,24 @@ const makeStyles = (colors: ThemeColors) =>
 
     insightText: {
       flex: 1,
-      lineHeight: 19,
+      lineHeight: 20,
     },
 
     activityList: {
-      gap: spacing.sm,
+      gap: spacing.md,
       marginTop: spacing.sm,
     },
 
     activityRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.sm,
+      gap: spacing.md,
       paddingVertical: 4,
     },
 
     activityIconBox: {
-      width: 36,
-      height: 36,
+      width: 38,
+      height: 38,
       borderRadius: radius.md,
       alignItems: 'center',
       justifyContent: 'center',
@@ -1208,8 +1263,8 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.md,
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
       borderRadius: radius.md,
     },
 
@@ -1221,12 +1276,13 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.md,
+      padding: spacing.xs,
     },
 
     githubIcon: {
-      width: 42,
-      height: 42,
-      borderRadius: radius.md,
+      width: 44,
+      height: 44,
+      borderRadius: radius.lg,
       backgroundColor: hexWithAlpha(colors.accent.primary, 0.12),
       alignItems: 'center',
       justifyContent: 'center',
@@ -1253,7 +1309,7 @@ const makeStyles = (colors: ThemeColors) =>
     updateCard: {
       gap: spacing.sm,
       padding: spacing.md,
-      borderRadius: radius.md,
+      borderRadius: radius.lg,
       backgroundColor: colors.surface.secondary,
       borderWidth: 1,
     },
@@ -1265,23 +1321,18 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     notesContainer: {
-      padding: spacing.sm,
+      padding: spacing.md,
       backgroundColor: colors.surface.primary,
-      borderRadius: radius.sm,
+      borderRadius: radius.md,
     },
 
     releaseNotes: {
       lineHeight: 20,
     },
 
-    updateActions: {
-      gap: spacing.sm,
-      marginTop: spacing.xs,
-    },
-
     downloadProgressWrap: {
       gap: spacing.xs,
-      padding: spacing.sm,
+      padding: spacing.md,
       backgroundColor: colors.surface.primary,
       borderRadius: radius.md,
       borderWidth: 1,
@@ -1297,8 +1348,8 @@ const makeStyles = (colors: ThemeColors) =>
     downloadCompleteCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.xs,
-      padding: spacing.sm,
+      gap: spacing.sm,
+      padding: spacing.md,
       backgroundColor: hexWithAlpha(colors.status.success, 0.1),
       borderRadius: radius.md,
       borderWidth: 1,
@@ -1308,12 +1359,17 @@ const makeStyles = (colors: ThemeColors) =>
     downloadErrorCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.xs,
-      padding: spacing.sm,
+      gap: spacing.sm,
+      padding: spacing.md,
       backgroundColor: hexWithAlpha(colors.status.error, 0.1),
       borderRadius: radius.md,
       borderWidth: 1,
       borderColor: colors.status.error,
+    },
+
+    updateActions: {
+      gap: spacing.sm,
+      marginTop: spacing.xs,
     },
 
     updateLinksRow: {

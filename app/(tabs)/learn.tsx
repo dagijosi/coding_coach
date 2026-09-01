@@ -17,7 +17,6 @@ import {
   ErrorState,
   LoadingState,
   ProgressBar,
-  SectionHeader,
 } from '@/components/ui';
 import { TabScreen } from '@/components/navigation';
 
@@ -33,7 +32,6 @@ import {
   radius,
   shadows,
   spacing,
-  typography,
   useTheme,
   useThemedStyles,
   type ThemeColors,
@@ -53,7 +51,6 @@ type CourseBundle = {
 };
 
 type DifficultyFilter = 'all' | 'beginner' | 'intermediate' | 'advanced';
-type StatusFilter = 'all' | 'in-progress' | 'completed' | 'unstarted';
 
 const DIFFICULTY_OPTIONS: Array<{ key: DifficultyFilter; label: string }> = [
   { key: 'all', label: 'All Levels' },
@@ -133,7 +130,6 @@ export default function LearnScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // Silently refresh progress when returning to Learn tab
       load();
     }, [load])
   );
@@ -150,7 +146,6 @@ export default function LearnScreen() {
     });
   };
 
-  // Course selector items
   const courseOptions = useMemo(() => {
     const totalLessons = courses.reduce(
       (acc, c) => acc + c.topics.reduce((tAcc, t) => tAcc + t.lessons.length, 0),
@@ -159,7 +154,7 @@ export default function LearnScreen() {
     const items = [
       {
         id: 'all',
-        name: 'All Languages',
+        name: 'All Tracks',
         icon: 'apps-outline' as keyof typeof Ionicons.glyphMap,
         count: totalLessons,
       },
@@ -181,7 +176,6 @@ export default function LearnScreen() {
     return items;
   }, [courses]);
 
-  // Filtered courses and topics
   const filteredCourses = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
@@ -194,7 +188,6 @@ export default function LearnScreen() {
         const filteredTopics = bundle.topics
           .map((topic) => {
             const filteredLessons = topic.lessons.filter(({ lesson }) => {
-              // Difficulty match
               if (selectedDifficulty !== 'all') {
                 const d = lesson.difficulty.toLowerCase();
                 if (selectedDifficulty === 'beginner' && d !== 'beginner' && d !== 'easy') {
@@ -216,7 +209,6 @@ export default function LearnScreen() {
                 }
               }
 
-              // Search query match
               if (query) {
                 const titleMatch = lesson.title.toLowerCase().includes(query);
                 const descMatch = lesson.description.toLowerCase().includes(query);
@@ -244,7 +236,6 @@ export default function LearnScreen() {
       .filter((bundle) => bundle.topics.length > 0);
   }, [courses, selectedCourseId, selectedDifficulty, searchQuery]);
 
-  // Calculate statistics for selected course
   const currentCourseStats = useMemo(() => {
     const targetCourses =
       selectedCourseId === 'all'
@@ -272,7 +263,7 @@ export default function LearnScreen() {
   if (loading) {
     return (
       <TabScreen>
-        <ScreenHeader />
+        <HeaderHero />
         <LoadingState message="Loading your curriculum..." />
       </TabScreen>
     );
@@ -281,7 +272,7 @@ export default function LearnScreen() {
   if (error) {
     return (
       <TabScreen>
-        <ScreenHeader />
+        <HeaderHero />
         <ErrorState title="Couldn't load lessons" onRetry={load} />
       </TabScreen>
     );
@@ -290,7 +281,7 @@ export default function LearnScreen() {
   if (courses.length === 0) {
     return (
       <TabScreen>
-        <ScreenHeader />
+        <HeaderHero />
         <EmptyState
           icon="book-outline"
           title="No courses yet"
@@ -302,10 +293,12 @@ export default function LearnScreen() {
 
   return (
     <TabScreen>
-      <ScreenHeader />
+      {/* Modern Hero Header */}
+      <HeaderHero />
 
-      {/* Course / Language Selector Bar */}
+      {/* Filter and Search Bar */}
       <View style={styles.filterSection}>
+        {/* Track Selector Pills */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -320,12 +313,12 @@ export default function LearnScreen() {
                 style={({ pressed }) => [
                   styles.courseChip,
                   isSelected && styles.courseChipActive,
-                  pressed && { opacity: 0.8 },
+                  pressed && { opacity: 0.85 },
                 ]}
               >
                 <Ionicons
                   name={opt.icon}
-                  size={16}
+                  size={17}
                   color={isSelected ? colors.accent.primary : colors.text.secondary}
                 />
                 <AppText
@@ -391,7 +384,7 @@ export default function LearnScreen() {
 
         {/* Quick Search */}
         <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={18} color={colors.text.muted} />
+          <Ionicons name="search-outline" size={19} color={colors.accent.secondary} />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -407,15 +400,17 @@ export default function LearnScreen() {
         </View>
       </View>
 
-      {/* Progress Overview Banner */}
+      {/* Track Progress Overview Banner */}
       <Card style={styles.progressBanner}>
         <View style={styles.progressBannerTop}>
           <View style={styles.progressBannerInfo}>
             <AppText variant="h3">
-              {selectedCourseId === 'all' ? 'Overall Learning Path' : courses.find(c => c.course.id === selectedCourseId)?.course.name}
+              {selectedCourseId === 'all'
+                ? 'Curriculum Progress'
+                : courses.find((c) => c.course.id === selectedCourseId)?.course.name}
             </AppText>
             <AppText variant="caption" muted>
-              {currentCourseStats.completed} of {currentCourseStats.total} lessons completed ({currentCourseStats.percentage}%)
+              {currentCourseStats.completed} of {currentCourseStats.total} completed ({currentCourseStats.percentage}%)
             </AppText>
           </View>
           <View style={styles.percentBadge}>
@@ -430,12 +425,12 @@ export default function LearnScreen() {
       {/* Filtered Course List */}
       {filteredCourses.length === 0 ? (
         <View style={styles.emptyFiltered}>
-          <Ionicons name="search" size={36} color={colors.text.muted} />
+          <Ionicons name="search" size={40} color={colors.text.muted} />
           <AppText variant="h3" style={{ marginTop: spacing.sm }}>
-            No matching lessons
+            No matching lessons found
           </AppText>
           <AppText variant="bodySmall" muted style={{ textAlign: 'center' }}>
-            Try choosing a different level or clearing your search filter.
+            Try adjusting your search keywords or level filter.
           </AppText>
         </View>
       ) : (
@@ -488,7 +483,7 @@ export default function LearnScreen() {
                             {
                               backgroundColor: isTopicAllDone
                                 ? colors.status.success
-                                : colors.accent.secondary,
+                                : colors.accent.primary,
                             },
                           ]}
                         />
@@ -498,12 +493,13 @@ export default function LearnScreen() {
                       </View>
 
                       <View style={styles.topicHeaderRight}>
-                        <AppText variant="caption" muted>
-                          {topicCompletedCount}/{topic.lessons.length} done
-                        </AppText>
+                        <Badge
+                          label={`${topicCompletedCount}/${topic.lessons.length}`}
+                          variant={isTopicAllDone ? 'success' : 'default'}
+                        />
                         <Ionicons
-                          name={isCollapsed ? 'chevron-down' : 'chevron-up'}
-                          size={18}
+                          name={isCollapsed ? 'chevron-down-circle-outline' : 'chevron-up-circle-outline'}
+                          size={20}
                           color={colors.text.muted}
                         />
                       </View>
@@ -589,7 +585,7 @@ export default function LearnScreen() {
                                     <View style={styles.metaTime}>
                                       <Ionicons
                                         name="time-outline"
-                                        size={13}
+                                        size={14}
                                         color={colors.text.muted}
                                       />
                                       <AppText variant="caption" muted>
@@ -622,13 +618,25 @@ export default function LearnScreen() {
   );
 }
 
-function ScreenHeader() {
+function HeaderHero() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
   return (
-    <SectionHeader
-      title="Learn"
-      subtitle="Structured coding tracks, concepts and interactive lessons."
-      icon="book-outline"
-    />
+    <View style={styles.heroHeader}>
+      <View style={styles.heroHeaderBadge}>
+        <Ionicons name="sparkles" size={13} color={colors.accent.primary} />
+        <AppText variant="caption" style={styles.heroBadgeText}>
+          CURRICULUM
+        </AppText>
+      </View>
+      <AppText variant="h1" style={styles.heroTitle}>
+        Explore &amp; Learn
+      </AppText>
+      <AppText variant="bodySmall" muted style={styles.heroSubtitle}>
+        Build technical mastery with structured lessons and live code experiments.
+      </AppText>
+    </View>
   );
 }
 
@@ -646,17 +654,57 @@ function StatusBadge({
   return null;
 }
 
+function hexWithAlpha(hex: string, alpha: number): string {
+  const value = Math.round(alpha * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `${hex}${value}`;
+}
+
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    heroHeader: {
+      gap: spacing.xs,
+      paddingTop: spacing.xs,
+      paddingBottom: spacing.sm,
+    },
+
+    heroHeaderBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 5,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 3,
+      borderRadius: radius.full,
+      backgroundColor: colors.accent.soft,
+      marginBottom: 2,
+    },
+
+    heroBadgeText: {
+      color: colors.accent.primary,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      fontSize: 10,
+    },
+
+    heroTitle: {
+      letterSpacing: -0.4,
+    },
+
+    heroSubtitle: {
+      lineHeight: 19,
+    },
+
     filterSection: {
       gap: spacing.sm,
-      marginTop: spacing.sm,
+      marginTop: spacing.xs,
       marginBottom: spacing.xs,
     },
 
     courseScroll: {
       gap: spacing.xs,
-      paddingVertical: 2,
+      paddingVertical: 4,
     },
 
     courseChip: {
@@ -669,11 +717,12 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.surface.primary,
       borderWidth: 1,
       borderColor: colors.border.default,
+      ...shadows.small,
     },
 
     courseChipActive: {
       borderColor: colors.accent.primary,
-      backgroundColor: colors.accent.soft,
+      backgroundColor: hexWithAlpha(colors.accent.primary, 0.12),
     },
 
     courseChipText: {
@@ -687,7 +736,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     chipCountBadge: {
-      paddingHorizontal: 6,
+      paddingHorizontal: 7,
       paddingVertical: 2,
       borderRadius: radius.full,
       backgroundColor: colors.surface.secondary,
@@ -714,9 +763,9 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     diffPill: {
-      paddingHorizontal: spacing.sm,
-      paddingVertical: 5,
-      borderRadius: radius.sm,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 6,
+      borderRadius: radius.full,
       backgroundColor: colors.surface.secondary,
       borderWidth: 1,
       borderColor: 'transparent',
@@ -729,7 +778,7 @@ const makeStyles = (colors: ThemeColors) =>
 
     diffPillText: {
       color: colors.text.secondary,
-      fontWeight: '500',
+      fontWeight: '600',
       fontSize: 12,
     },
 
@@ -743,23 +792,25 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: 'center',
       gap: spacing.sm,
       backgroundColor: colors.surface.primary,
-      borderRadius: radius.md,
+      borderRadius: radius.xl,
       borderWidth: 1,
       borderColor: colors.border.default,
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.xs,
+      marginTop: 2,
     },
 
     searchInput: {
       flex: 1,
       color: colors.text.primary,
       fontSize: 14,
-      paddingVertical: 6,
+      paddingVertical: 8,
     },
 
     progressBanner: {
       gap: spacing.sm,
       marginTop: spacing.xs,
+      padding: spacing.md,
     },
 
     progressBannerTop: {
@@ -774,8 +825,8 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     percentBadge: {
-      paddingHorizontal: spacing.sm,
-      paddingVertical: 4,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 5,
       borderRadius: radius.md,
       backgroundColor: colors.accent.soft,
     },
@@ -789,7 +840,7 @@ const makeStyles = (colors: ThemeColors) =>
 
     list: {
       gap: spacing.lg,
-      marginTop: spacing.sm,
+      marginTop: spacing.xs,
     },
 
     courseBlock: {
@@ -804,24 +855,28 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     courseIconBox: {
-      width: 40,
-      height: 40,
-      borderRadius: radius.md,
+      width: 42,
+      height: 42,
+      borderRadius: radius.lg,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.accent.soft,
     },
 
     topicSection: {
-      gap: spacing.xs,
+      gap: spacing.sm,
     },
 
     topicHeaderBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: spacing.xs,
-      paddingHorizontal: 2,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      backgroundColor: colors.surface.secondary,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border.default,
     },
 
     topicHeaderLeft: {
@@ -839,17 +894,19 @@ const makeStyles = (colors: ThemeColors) =>
 
     topicName: {
       color: colors.text.primary,
-      fontWeight: '600',
+      fontWeight: '700',
+      flex: 1,
     },
 
     topicHeaderRight: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.xs,
+      gap: spacing.sm,
     },
 
     lessonsContainer: {
-      gap: spacing.xs,
+      gap: spacing.sm,
+      paddingLeft: 4,
     },
 
     lessonCard: {
@@ -867,8 +924,8 @@ const makeStyles = (colors: ThemeColors) =>
     },
 
     lessonIconBox: {
-      width: 38,
-      height: 38,
+      width: 42,
+      height: 42,
       borderRadius: radius.md,
       alignItems: 'center',
       justifyContent: 'center',
@@ -888,7 +945,7 @@ const makeStyles = (colors: ThemeColors) =>
 
     lessonContent: {
       flex: 1,
-      gap: 3,
+      gap: 4,
     },
 
     lessonTitleRow: {
@@ -910,13 +967,13 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
-      marginTop: 3,
+      marginTop: 4,
     },
 
     metaTime: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 3,
+      gap: 4,
     },
 
     lessonChevron: {

@@ -277,12 +277,24 @@ export default function PracticeScreen() {
 }
 
 function Header() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
   return (
-    <SectionHeader
-      title="Practice"
-      subtitle="Level up with hands-on coding problems."
-      icon="code-slash-outline"
-    />
+    <View style={styles.heroHeader}>
+      <View style={styles.heroHeaderBadge}>
+        <Ionicons name="code-slash" size={13} color={colors.accent.primary} />
+        <AppText variant="caption" style={styles.heroBadgeText}>
+          CHALLENGES &amp; PROBLEMS
+        </AppText>
+      </View>
+      <AppText variant="h1" style={styles.heroTitle}>
+        Coding Practice
+      </AppText>
+      <AppText variant="bodySmall" muted style={styles.heroSubtitle}>
+        Strengthen problem solving with interactive coding challenges.
+      </AppText>
+    </View>
   );
 }
 
@@ -488,11 +500,44 @@ function formatDate(iso: string): string {
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
+    heroHeader: {
+      gap: spacing.xs,
+      paddingTop: spacing.xs,
+      paddingBottom: spacing.sm,
+    },
+
+    heroHeaderBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 5,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 3,
+      borderRadius: radius.full,
+      backgroundColor: colors.accent.soft,
+      marginBottom: 2,
+    },
+
+    heroBadgeText: {
+      color: colors.accent.primary,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      fontSize: 10,
+    },
+
+    heroTitle: {
+      letterSpacing: -0.4,
+    },
+
+    heroSubtitle: {
+      lineHeight: 19,
+    },
+
     filters: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: spacing.sm,
-      marginTop: spacing.lg,
+      marginTop: spacing.md,
     },
 
     chip: {

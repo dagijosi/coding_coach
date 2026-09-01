@@ -120,7 +120,7 @@ const TRY_IT_BY_LESSON: Record<string, TryItConfig> = {
     hint: 'Experiment: Change the input number below or edit the function body to add a bonus, then press Run.',
     conceptNote: 'Variables hold values that you can use and change. The parameter "base" receives the number passed into describeTotal(base).',
     explanationTemplate: (args, result) =>
-      `Called describeTotal(${JSON.stringify(args[0])}) -> 'total' started at ${JSON.stringify(args[0])}, added 1, and returned ${JSON.stringify(result)}.`,
+      `Ran describeTotal(base = ${JSON.stringify(args[0])}) with your code -> Result returned: ${JSON.stringify(result)}`,
   },
   'lesson-functions': {
     starterCode: `function sum(a, b) {
@@ -136,7 +136,7 @@ const TRY_IT_BY_LESSON: Record<string, TryItConfig> = {
     hint: 'Try selecting different input numbers or modifying the calculation inside sum(a, b), then press Run.',
     conceptNote: 'Functions take input values (arguments) and return a calculated result.',
     explanationTemplate: (args, result) =>
-      `Called sum(${JSON.stringify(args[0])}, ${JSON.stringify(args[1])}) -> added the numbers together and returned ${JSON.stringify(result)}.`,
+      `Ran sum(${JSON.stringify(args[0])}, ${JSON.stringify(args[1])}) with your code -> Result returned: ${JSON.stringify(result)}`,
   },
 };
 
@@ -153,7 +153,7 @@ const DEFAULT_TRY_IT: TryItConfig = {
   hint: 'Edit the function or choose different input values and press Run to see what it returns.',
   conceptNote: 'Experiment with the code editor and watch live evaluation in action.',
   explanationTemplate: (args, result) =>
-    `Called greet(${JSON.stringify(args[0])}) -> produced ${JSON.stringify(result)}.`,
+    `Ran greet(${JSON.stringify(args[0])}) with your code -> Result returned: ${JSON.stringify(result)}`,
 };
 
 /**
