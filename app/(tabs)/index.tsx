@@ -217,7 +217,7 @@ export default function HomeScreen() {
 
   const xp = progress?.xp ?? 0;
   const streak = progress?.currentStreak ?? 0;
-  const level = progress?.level ?? 1;
+  const level = Math.floor(xp / 100) + 1;
   const overallProgress =
     lessonsTotal === 0 ? 0 : lessonsCompleted / lessonsTotal;
 
@@ -297,7 +297,7 @@ export default function HomeScreen() {
             </View>
             <Badge
               label={overallProgress >= 1 ? 'COMPLETED' : `${lessonsCompleted}/${lessonsTotal}`}
-              variant={overallProgress >= 1 ? 'success' : 'info'}
+              variant={overallProgress >= 1 ? 'success' : 'default'}
             />
           </View>
 
@@ -888,7 +888,7 @@ const makeStyles = (colors: ThemeColors) =>
       borderRadius: radius.lg,
       borderWidth: 1,
       borderColor: colors.border.default,
-      ...shadows.sm,
+      ...shadows.small,
     },
 
     quickActionIconWrap: {

@@ -3,7 +3,7 @@ export default {
     name: 'Coding Coach',
     slug: 'coding-coach',
     scheme: 'codingcoach',
-    version: '1.0.7',
+    version: '1.0.8',
     newArchEnabled: true,
     orientation: 'portrait',
     icon: './assets/icon.png',
