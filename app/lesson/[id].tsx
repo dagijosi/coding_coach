@@ -76,44 +76,84 @@ type Step =
   | { kind: 'challenge'; challenge: Challenge }
   | { kind: 'complete' };
 
+type TryItParam = {
+  name: string;
+  label: string;
+  defaultValue: unknown;
+  type?: 'number' | 'string' | 'boolean';
+  options?: unknown[];
+};
+
 type TryItConfig = {
   starterCode: string;
   functionName: string;
   args: unknown[];
+  params?: TryItParam[];
   hint: string;
+  conceptNote?: string;
+  explanationTemplate?: (args: unknown[], result: unknown) => string;
 };
 
 const TRY_IT_BY_LESSON: Record<string, TryItConfig> = {
   'lesson-variables': {
     starterCode: `function describeTotal(base) {
+  // 'total' is a variable initialized with the input value 'base'
   let total = base;
+
+  // We reassign 'total' by adding 1 to its current value
   total = total + 1;
+
+  // Return the final result as a friendly text string
   return 'Total is ' + total;
 }`,
     functionName: 'describeTotal',
     args: [10],
-    hint:
-      'Experiment: edit the function body or change the value passed in, then press Run.',
+    params: [
+      {
+        name: 'base',
+        label: 'Input Value (base)',
+        defaultValue: 10,
+        type: 'number',
+        options: [5, 10, 20, 50],
+      },
+    ],
+    hint: 'Experiment: Change the input number below or edit the function body to add a bonus, then press Run.',
+    conceptNote: 'Variables hold values that you can use and change. The parameter "base" receives the number passed into describeTotal(base).',
+    explanationTemplate: (args, result) =>
+      `Called describeTotal(${JSON.stringify(args[0])}) -> 'total' started at ${JSON.stringify(args[0])}, added 1, and returned ${JSON.stringify(result)}.`,
   },
   'lesson-functions': {
     starterCode: `function sum(a, b) {
+  // 'a' and 'b' are parameters passed into this function
   return a + b;
 }`,
     functionName: 'sum',
     args: [3, 4],
-    hint:
-      'Try editing the numbers in sum(3, 4) or the function body, then press Run.',
+    params: [
+      { name: 'a', label: 'First number (a)', defaultValue: 3, type: 'number', options: [1, 3, 5, 10] },
+      { name: 'b', label: 'Second number (b)', defaultValue: 4, type: 'number', options: [2, 4, 8, 20] },
+    ],
+    hint: 'Try selecting different input numbers or modifying the calculation inside sum(a, b), then press Run.',
+    conceptNote: 'Functions take input values (arguments) and return a calculated result.',
+    explanationTemplate: (args, result) =>
+      `Called sum(${JSON.stringify(args[0])}, ${JSON.stringify(args[1])}) -> added the numbers together and returned ${JSON.stringify(result)}.`,
   },
 };
 
 const DEFAULT_TRY_IT: TryItConfig = {
   starterCode: `function greet(name) {
+  // Returns a customized greeting string
   return 'Hello, ' + name + '!';
 }`,
   functionName: 'greet',
   args: ['Dagi'],
-  hint:
-    'Edit the function or its input and press Run to see what it returns.',
+  params: [
+    { name: 'name', label: 'Name (string)', defaultValue: 'Dagi', type: 'string', options: ['Dagi', 'Alex', 'Coder', 'World'] },
+  ],
+  hint: 'Edit the function or choose different input values and press Run to see what it returns.',
+  conceptNote: 'Experiment with the code editor and watch live evaluation in action.',
+  explanationTemplate: (args, result) =>
+    `Called greet(${JSON.stringify(args[0])}) -> produced ${JSON.stringify(result)}.`,
 };
 
 /**
@@ -582,40 +622,72 @@ function TryItStep({
   const styles = useThemedStyles(makeStyles);
 
   const [code, setCode] = useState(config.starterCode);
+  const [currentArgs, setCurrentArgs] = useState<unknown[]>(config.args);
   const [running, setRunning] = useState(false);
   const [output, setOutput] = useState<{
     ok: boolean;
     text: string;
+    explanation?: string;
+    evaluatedArgs: unknown[];
   } | null>(null);
 
   useEffect(() => {
     setCode(config.starterCode);
+    setCurrentArgs(config.args);
     setOutput(null);
   }, [config]);
+
+  const updateArg = (index: number, val: unknown) => {
+    setCurrentArgs((prev) => {
+      const next = [...prev];
+      next[index] = val;
+      return next;
+    });
+  };
+
+  const handleResetCode = () => {
+    setCode(config.starterCode);
+    setCurrentArgs(config.args);
+    setOutput(null);
+  };
 
   const run = async () => {
     setRunning(true);
     setOutput(null);
 
     const engine = getJavaScriptEngine();
+    const argsToRun = currentArgs;
     const result = await engine.executeFunction({
       code,
       functionName: config.functionName,
-      args: config.args,
+      args: argsToRun,
       timeoutMs: 2000,
     });
 
     if (result.status === 'success') {
+      const explanation = config.explanationTemplate
+        ? config.explanationTemplate(argsToRun, result.value)
+        : undefined;
       setOutput({
         ok: true,
         text: JSON.stringify(result.value),
+        explanation,
+        evaluatedArgs: argsToRun,
       });
     } else {
-      setOutput({ ok: false, text: result.error });
+      setOutput({
+        ok: false,
+        text: result.error,
+        evaluatedArgs: argsToRun,
+      });
     }
 
     setRunning(false);
   };
+
+  const callSignature = `${config.functionName}(${currentArgs
+    .map((a) => JSON.stringify(a))
+    .join(', ')})`;
 
   return (
     <FadeInView style={styles.stepContent}>
@@ -625,23 +697,114 @@ function TryItStep({
         subtitle={config.hint}
       />
 
+      {config.conceptNote ? (
+        <View style={styles.conceptNoteBox}>
+          <Ionicons name="information-circle-outline" size={18} color={colors.accent.primary} />
+          <AppText variant="bodySmall" style={styles.conceptNoteText}>
+            {config.conceptNote}
+          </AppText>
+        </View>
+      ) : null}
+
+      {/* Interactive Parameters Card */}
+      {config.params && config.params.length > 0 && (
+        <View style={styles.paramsCard}>
+          <View style={styles.paramsHeader}>
+            <Ionicons name="options-outline" size={16} color={colors.accent.primary} />
+            <AppText variant="bodySmall" style={styles.paramsTitle}>
+              Function Inputs (Arguments)
+            </AppText>
+          </View>
+
+          <View style={styles.paramsList}>
+            {config.params.map((param, pIdx) => {
+              const currentVal = currentArgs[pIdx] ?? param.defaultValue;
+              return (
+                <View key={param.name} style={styles.paramRow}>
+                  <View style={styles.paramMeta}>
+                    <AppText variant="caption" style={styles.paramName}>
+                      {param.name}:
+                    </AppText>
+                    <AppText variant="caption" muted>
+                      {param.label}
+                    </AppText>
+                  </View>
+
+                  {param.options && param.options.length > 0 ? (
+                    <View style={styles.paramOptions}>
+                      {param.options.map((opt, optIdx) => {
+                        const isSelected = currentVal === opt;
+                        return (
+                          <Pressable
+                            key={`${optIdx}-${String(opt)}`}
+                            onPress={() => updateArg(pIdx, opt)}
+                            style={[
+                              styles.paramPill,
+                              isSelected && styles.paramPillActive,
+                            ]}
+                          >
+                            <AppText
+                              variant="caption"
+                              style={[
+                                styles.paramPillText,
+                                isSelected && styles.paramPillTextActive,
+                              ]}
+                            >
+                              {String(opt)}
+                            </AppText>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <View style={styles.paramPillActive}>
+                      <AppText variant="caption" style={styles.paramPillTextActive}>
+                        {JSON.stringify(currentVal)}
+                      </AppText>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      {/* Code Editor */}
       <View style={styles.editorContainer}>
         <View style={styles.editorHeader}>
-          <AppText variant="caption" style={styles.editorLang}>
-            JavaScript
-          </AppText>
+          <View style={styles.editorHeaderLeft}>
+            <AppText variant="caption" style={styles.editorLang}>
+              JavaScript
+            </AppText>
+            <AppText variant="caption" muted style={styles.callPreview}>
+              will run {callSignature}
+            </AppText>
+          </View>
           <EngineBadge status={engineStatus} compact />
         </View>
         <CodeEditor value={code} onChangeText={setCode} minHeight={180} />
       </View>
 
-      <Button
-        title={running ? 'Running...' : 'Run Code'}
-        loading={running}
-        disabled={running}
-        onPress={run}
-      />
+      {/* Actions */}
+      <View style={styles.tryItActions}>
+        <View style={styles.tryItMainBtn}>
+          <Button
+            title={running ? 'Running...' : `Run ${callSignature}`}
+            loading={running}
+            disabled={running}
+            onPress={run}
+          />
+        </View>
+        <Button
+          title="Reset"
+          variant="secondary"
+          disabled={running}
+          onPress={handleResetCode}
+        />
+      </View>
 
+      {/* Output Card */}
       {output && (
         <View
           style={[
@@ -657,14 +820,29 @@ function TryItStep({
             />
             <AppText
               variant="bodySmall"
-              style={{ color: output.ok ? colors.status.success : colors.status.error, fontWeight: '600' }}
+              style={{
+                color: output.ok ? colors.status.success : colors.status.error,
+                fontWeight: '600',
+              }}
             >
-              {config.functionName}() returned
+              {config.functionName}(
+              {output.evaluatedArgs.map((a) => JSON.stringify(a)).join(', ')}
+              ) returned:
             </AppText>
           </View>
+
           <AppText variant="code" style={styles.outputText}>
             {output.text}
           </AppText>
+
+          {output.explanation ? (
+            <View style={styles.outputExplanation}>
+              <Ionicons name="bulb-outline" size={14} color={colors.accent.primary} />
+              <AppText variant="caption" style={styles.outputExplanationText}>
+                {output.explanation}
+              </AppText>
+            </View>
+          ) : null}
         </View>
       )}
 
@@ -1643,6 +1821,124 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: '600',
     },
 
+    conceptNoteBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      padding: spacing.md,
+      backgroundColor: hexWithAlpha(colors.accent.primary, 0.08),
+      borderRadius: radius.md,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.accent.primary,
+    },
+
+    conceptNoteText: {
+      flex: 1,
+      color: colors.text.primary,
+      lineHeight: 18,
+    },
+
+    paramsCard: {
+      padding: spacing.md,
+      backgroundColor: colors.surface.primary,
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      gap: spacing.sm,
+    },
+
+    paramsHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+
+    paramsTitle: {
+      fontWeight: '600',
+      color: colors.text.primary,
+    },
+
+    paramsList: {
+      gap: spacing.sm,
+    },
+
+    paramRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+
+    paramMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      flex: 1,
+    },
+
+    paramName: {
+      fontWeight: '700',
+      color: colors.accent.primary,
+      fontFamily: typography.code.fontFamily,
+    },
+
+    paramOptions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+
+    paramPill: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.surface.secondary,
+    },
+
+    paramPillActive: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.accent.primary,
+      backgroundColor: hexWithAlpha(colors.accent.primary, 0.15),
+    },
+
+    paramPillText: {
+      color: colors.text.secondary,
+      fontFamily: typography.code.fontFamily,
+      fontWeight: '500',
+    },
+
+    paramPillTextActive: {
+      color: colors.accent.primary,
+      fontFamily: typography.code.fontFamily,
+      fontWeight: '700',
+    },
+
+    editorHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+
+    callPreview: {
+      fontFamily: typography.code.fontFamily,
+      fontSize: 11,
+    },
+
+    tryItActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+
+    tryItMainBtn: {
+      flex: 1,
+    },
+
     outputCard: {
       padding: spacing.md,
       borderRadius: radius.lg,
@@ -1668,6 +1964,22 @@ const makeStyles = (colors: ThemeColors) =>
 
     outputText: {
       color: colors.text.primary,
+    },
+
+    outputExplanation: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.xs,
+      marginTop: spacing.xs,
+      paddingTop: spacing.xs,
+      borderTopWidth: 1,
+      borderTopColor: hexWithAlpha(colors.border.default, 0.5),
+    },
+
+    outputExplanationText: {
+      flex: 1,
+      color: colors.text.secondary,
+      lineHeight: 16,
     },
 
     problemDesc: {
