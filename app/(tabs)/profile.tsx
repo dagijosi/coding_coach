@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 
@@ -56,6 +56,18 @@ import {
   type DownloadProgress,
   type ReleaseInfo,
 } from '@/services/updateService';
+import {
+  getNotificationPreferences,
+  getSystemNotificationPermissionStatus,
+  requestSystemNotificationPermission,
+  saveNotificationPreferences,
+  type NotificationPreferences,
+  type PermissionStatus,
+} from '@/services/permissionService';
+import {
+  scheduleDailyStudyReminder,
+  sendTestNotification,
+} from '@/services/notificationService';
 
 const LOCAL_PROFILE_NAME = 'Dagi';
 
@@ -587,6 +599,7 @@ export default function ProgressScreen() {
       {activeTab === 'settings' && (
         <View style={styles.tabContent}>
           <AppearanceSettings />
+          <NotificationPermissionSettings />
           <GitHubSettings />
           <AppUpdateSettings />
         </View>
@@ -693,6 +706,217 @@ function AppearanceSettings() {
             </Pressable>
           );
         })}
+      </View>
+    </Card>
+  );
+}
+
+function NotificationPermissionSettings() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+
+  const [permStatus, setPermStatus] = useState<PermissionStatus>('undetermined');
+  const [prefs, setPrefs] = useState<NotificationPreferences>({
+    notificationsEnabled: false,
+    dailyReminderEnabled: true,
+    dailyReminderHour: 19,
+    dailyReminderMinute: 0,
+    streakAlertsEnabled: true,
+    updateAlertsEnabled: true,
+    lastPromptedAt: null,
+    permissionPromptCount: 0,
+  });
+  const [requesting, setRequesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const loadData = useCallback(async () => {
+    const status = await getSystemNotificationPermissionStatus();
+    setPermStatus(status);
+    const p = await getNotificationPreferences();
+    setPrefs(p);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
+  const handleRequestPermission = async () => {
+    setRequesting(true);
+    setTestResult(null);
+    try {
+      const res = await requestSystemNotificationPermission();
+      setPermStatus(res.status);
+      setPrefs((prev) => ({ ...prev, notificationsEnabled: res.granted }));
+      if (res.granted) {
+        await scheduleDailyStudyReminder();
+      }
+    } finally {
+      setRequesting(false);
+    }
+  };
+
+  const handleToggleDailyReminder = async (value: boolean) => {
+    const updated = await saveNotificationPreferences({ dailyReminderEnabled: value });
+    setPrefs(updated);
+    if (value && permStatus === 'granted') {
+      await scheduleDailyStudyReminder();
+    }
+  };
+
+  const handleToggleStreakAlerts = async (value: boolean) => {
+    const updated = await saveNotificationPreferences({ streakAlertsEnabled: value });
+    setPrefs(updated);
+  };
+
+  const handleToggleUpdateAlerts = async (value: boolean) => {
+    const updated = await saveNotificationPreferences({ updateAlertsEnabled: value });
+    setPrefs(updated);
+  };
+
+  const handleSendTest = async () => {
+    setTestResult(null);
+    const res = await sendTestNotification();
+    setTestResult(res);
+    const status = await getSystemNotificationPermissionStatus();
+    setPermStatus(status);
+  };
+
+  const isGranted = permStatus === 'granted';
+
+  return (
+    <Card>
+      <View style={styles.cardHeaderRow}>
+        <Ionicons name="notifications-outline" size={18} color={colors.accent.primary} />
+        <AppText variant="h3" style={styles.flex}>
+          Notifications &amp; Permissions
+        </AppText>
+        <Badge
+          label={isGranted ? 'ENABLED' : permStatus === 'denied' ? 'DENIED' : 'NOT SET'}
+          variant={isGranted ? 'success' : permStatus === 'denied' ? 'error' : 'warning'}
+        />
+      </View>
+
+      <View style={styles.notifContainer}>
+        <AppText variant="bodySmall" muted>
+          Configure daily learning reminders, streak protection alerts, and app release updates.
+        </AppText>
+
+        {!isGranted && (
+          <View style={styles.permPromptCard}>
+            <View style={styles.permPromptHeader}>
+              <Ionicons name="shield-checkmark-outline" size={20} color={colors.accent.primary} />
+              <View style={styles.flex}>
+                <AppText variant="bodySmall" style={{ fontWeight: '700' }}>
+                  Enable Study Reminders
+                </AppText>
+                <AppText variant="caption" muted>
+                  Allow notification permission to receive your daily practice prompts.
+                </AppText>
+              </View>
+            </View>
+            <Button
+              title={requesting ? 'Requesting...' : 'Grant Notification Permission'}
+              loading={requesting}
+              onPress={handleRequestPermission}
+            />
+          </View>
+        )}
+
+        {/* Toggles */}
+        <View style={styles.notifTogglesList}>
+          <View style={styles.notifToggleRow}>
+            <View style={styles.flex}>
+              <AppText variant="bodySmall" style={{ fontWeight: '600' }}>
+                Daily Study Reminder (7:00 PM)
+              </AppText>
+              <AppText variant="caption" muted>
+                Prompt to solve 1 interactive challenge per day
+              </AppText>
+            </View>
+            <Switch
+              value={prefs.dailyReminderEnabled}
+              onValueChange={handleToggleDailyReminder}
+              trackColor={{ false: colors.border.default, true: colors.accent.primary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          <View style={styles.notifToggleRow}>
+            <View style={styles.flex}>
+              <AppText variant="bodySmall" style={{ fontWeight: '600' }}>
+                Streak Saver Alerts
+              </AppText>
+              <AppText variant="caption" muted>
+                Alert in the evening if your streak is at risk
+              </AppText>
+            </View>
+            <Switch
+              value={prefs.streakAlertsEnabled}
+              onValueChange={handleToggleStreakAlerts}
+              trackColor={{ false: colors.border.default, true: colors.accent.primary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          <View style={styles.notifToggleRow}>
+            <View style={styles.flex}>
+              <AppText variant="bodySmall" style={{ fontWeight: '600' }}>
+                New Updates &amp; Lessons
+              </AppText>
+              <AppText variant="caption" muted>
+                Notify when new features or lessons become available
+              </AppText>
+            </View>
+            <Switch
+              value={prefs.updateAlertsEnabled}
+              onValueChange={handleToggleUpdateAlerts}
+              trackColor={{ false: colors.border.default, true: colors.accent.primary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
+        {/* Test Notification Button */}
+        <View style={styles.notifTestSection}>
+          <Button
+            title="Send Test Notification"
+            variant="secondary"
+            onPress={handleSendTest}
+          />
+          {testResult && (
+            <View
+              style={[
+                styles.testResultBox,
+                {
+                  backgroundColor: testResult.success
+                    ? hexWithAlpha(colors.status.success, 0.1)
+                    : hexWithAlpha(colors.status.error, 0.1),
+                  borderColor: testResult.success
+                    ? hexWithAlpha(colors.status.success, 0.4)
+                    : hexWithAlpha(colors.status.error, 0.4),
+                },
+              ]}
+            >
+              <Ionicons
+                name={testResult.success ? 'checkmark-circle' : 'alert-circle'}
+                size={16}
+                color={testResult.success ? colors.status.success : colors.status.error}
+              />
+              <AppText
+                variant="caption"
+                style={{
+                  color: testResult.success ? colors.status.success : colors.status.error,
+                  fontWeight: '600',
+                  flex: 1,
+                }}
+              >
+                {testResult.message}
+              </AppText>
+            </View>
+          )}
+        </View>
       </View>
     </Card>
   );
@@ -1446,6 +1670,55 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.sm,
+    },
+
+    notifContainer: {
+      gap: spacing.md,
+      marginTop: spacing.xs,
+    },
+
+    permPromptCard: {
+      padding: spacing.md,
+      borderRadius: radius.md,
+      backgroundColor: hexWithAlpha(colors.accent.primary, 0.08),
+      borderWidth: 1,
+      borderColor: hexWithAlpha(colors.accent.primary, 0.25),
+      gap: spacing.sm,
+    },
+
+    permPromptHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+
+    notifTogglesList: {
+      gap: spacing.sm,
+      borderTopWidth: 1,
+      borderTopColor: colors.border.default,
+      paddingTop: spacing.sm,
+    },
+
+    notifToggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+      paddingVertical: spacing.xs,
+    },
+
+    notifTestSection: {
+      gap: spacing.xs,
+      marginTop: spacing.xs,
+    },
+
+    testResultBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      padding: spacing.sm,
+      borderRadius: radius.sm,
+      borderWidth: 1,
     },
 
     flex: {

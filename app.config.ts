@@ -19,6 +19,11 @@ export default {
       },
       predictiveBackGestureEnabled: false,
       package: 'com.dagijosi.codingcoach',
+      permissions: [
+        'POST_NOTIFICATIONS',
+        'REQUEST_INSTALL_PACKAGES',
+        'INTERNET',
+      ],
     },
     web: {
       bundler: 'metro',
@@ -55,6 +60,13 @@ export default {
       ],
       'expo-sqlite',
       'expo-secure-store',
+      [
+        'expo-notifications',
+        {
+          icon: './assets/icon.png',
+          color: '#38BDF8',
+        },
+      ],
     ],
   },
 };

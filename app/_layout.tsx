@@ -13,6 +13,10 @@ import { ToastProvider } from '@/components/toast';
 import { WebViewEngineHost } from '@/code/engine/WebViewEngineHost';
 import { ThemeProvider, useTheme } from '@/theme';
 import { BrandSplash } from '@/components/branding/BrandSplash';
+import {
+  initializeNotificationChannels,
+  scheduleDailyStudyReminder,
+} from '@/services/notificationService';
 
 // Keep the native splash visible until the custom TSX splash mounts
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -52,6 +56,10 @@ function Boot() {
           // rebuilding the database from scratch so the app still launches.
           await repairDatabase();
         }
+
+        // Initialize local notification channels & reminders
+        initializeNotificationChannels().catch(() => {});
+        scheduleDailyStudyReminder().catch(() => {});
       } catch (error) {
         console.error('Failed to initialize database:', error);
       } finally {
