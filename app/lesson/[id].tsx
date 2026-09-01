@@ -186,9 +186,8 @@ export default function LessonScreen() {
     'available' | 'unavailable' | 'initializing' | 'error'
   >('unavailable');
 
-  const solvedProblems = useRef<Set<string>>(new Set());
-  const passedChallenges = useRef<Set<string>>(new Set());
-  const [, forceUpdate] = useReducer((x) => x + 1, 0);
+  const [solvedProblemIds, setSolvedProblemIds] = useState<Set<string>>(new Set());
+  const [passedChallengeIds, setPassedChallengeIds] = useState<Set<string>>(new Set());
   const didRestore = useRef(false);
 
   useEffect(() => {
@@ -257,13 +256,13 @@ export default function LessonScreen() {
   const isGated = useMemo(() => {
     if (!step) return false;
     if (step.kind === 'problem') {
-      return !solvedProblems.current.has(step.problem.id);
+      return !solvedProblemIds.has(step.problem.id);
     }
     if (step.kind === 'challenge') {
-      return !passedChallenges.current.has(step.challenge.id);
+      return !passedChallengeIds.has(step.challenge.id);
     }
     return false;
-  }, [step, currentIndex]);
+  }, [step, solvedProblemIds, passedChallengeIds]);
 
   const progress = steps.length > 0 ? (currentIndex + 1) / steps.length : 0;
 
@@ -277,16 +276,22 @@ export default function LessonScreen() {
 
   const onProblemSolved = useCallback(
     (problemId: string) => {
-      solvedProblems.current.add(problemId);
-      forceUpdate();
+      setSolvedProblemIds((prev) => {
+        const next = new Set(prev);
+        next.add(problemId);
+        return next;
+      });
     },
     []
   );
 
   const onChallengePassed = useCallback(
     (challengeId: string) => {
-      passedChallenges.current.add(challengeId);
-      forceUpdate();
+      setPassedChallengeIds((prev) => {
+        const next = new Set(prev);
+        next.add(challengeId);
+        return next;
+      });
     },
     []
   );
@@ -300,6 +305,10 @@ export default function LessonScreen() {
         setCurrentIndex(
           progressToIndex(saved.progress, steps.length)
         );
+        if (saved.status === 'completed') {
+          setSolvedProblemIds(new Set(problems.map((p) => p.id)));
+          setPassedChallengeIds(new Set(challenges.map((c) => c.id)));
+        }
       })
       .catch(() => {
         // Not resumable — start from the beginning.
@@ -307,7 +316,7 @@ export default function LessonScreen() {
       .finally(() => {
         didRestore.current = true;
       });
-  }, [lesson, steps.length]);
+  }, [lesson, steps.length, problems, challenges]);
 
   // Persist the current step whenever the learner navigates.
   useEffect(() => {
