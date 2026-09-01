@@ -138,6 +138,7 @@ export async function sendTask(
       status: 'success',
       value: result.value,
       executionTimeMs: result.executionTimeMs,
+      logs: result.logs,
     };
   }
 
@@ -145,6 +146,7 @@ export async function sendTask(
     status: 'error',
     error: result.error,
     executionTimeMs: result.executionTimeMs,
+    logs: result.logs,
   };
 }
 

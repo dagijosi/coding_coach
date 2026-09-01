@@ -82,6 +82,14 @@ type TryItParam = {
   defaultValue: unknown;
   type?: 'number' | 'string' | 'boolean';
   options?: unknown[];
+  min?: number;
+  max?: number;
+  step?: number;
+};
+
+type TryItMiniGoal = {
+  description: string;
+  check: (result: unknown, args: unknown[]) => boolean;
 };
 
 type TryItConfig = {
@@ -91,8 +99,20 @@ type TryItConfig = {
   params?: TryItParam[];
   hint: string;
   conceptNote?: string;
+  miniGoal?: TryItMiniGoal;
+  quickSnippets?: Array<{ label: string; insert: string }>;
   explanationTemplate?: (args: unknown[], result: unknown) => string;
 };
+
+const DEFAULT_SNIPPETS = [
+  { label: '+ 5', insert: ' + 5' },
+  { label: '* 2', insert: ' * 2' },
+  { label: 'log()', insert: "\n  console.log('Value is:', total);" },
+  { label: 'return', insert: 'return ' },
+  { label: 'let', insert: 'let ' },
+  { label: '""', insert: "''" },
+  { label: '===', insert: ' === ' },
+];
 
 const TRY_IT_BY_LESSON: Record<string, TryItConfig> = {
   'lesson-variables': {
@@ -102,6 +122,9 @@ const TRY_IT_BY_LESSON: Record<string, TryItConfig> = {
 
   // We reassign 'total' by adding 1 to its current value
   total = total + 1;
+
+  // Log to console for live inspection
+  console.log('Inside describeTotal, total is:', total);
 
   // Return the final result as a friendly text string
   return 'Total is ' + total;
@@ -114,27 +137,58 @@ const TRY_IT_BY_LESSON: Record<string, TryItConfig> = {
         label: 'Input Value (base)',
         defaultValue: 10,
         type: 'number',
+        min: 0,
+        max: 100,
+        step: 5,
         options: [5, 10, 20, 50],
       },
     ],
-    hint: 'Experiment: Change the input number below or edit the function body to add a bonus, then press Run.',
-    conceptNote: 'Variables hold values that you can use and change. The parameter "base" receives the number passed into describeTotal(base).',
+    hint: 'Experiment: Change the input number below or edit the function body, then press Run.',
+    conceptNote: 'Variables hold values that you can use and update. The parameter "base" receives the number passed into describeTotal(base).',
+    miniGoal: {
+      description: 'Make describeTotal return a result of 25 or more',
+      check: (result) => {
+        if (typeof result === 'string') {
+          const match = result.match(/\d+/);
+          return match ? parseInt(match[0], 10) >= 25 : false;
+        }
+        return typeof result === 'number' ? result >= 25 : false;
+      },
+    },
+    quickSnippets: [
+      { label: '+ 5', insert: ' + 5' },
+      { label: '* 2', insert: ' * 2' },
+      { label: 'log(total)', insert: "\n  console.log('Current total:', total);" },
+      { label: '+ " bonus"', insert: ' + " (bonus)"' },
+      { label: 'let bonus = 10;', insert: '\n  let bonus = 10;\n  total = total + bonus;' },
+    ],
     explanationTemplate: (args, result) =>
       `Ran describeTotal(base = ${JSON.stringify(args[0])}) with your code -> Result returned: ${JSON.stringify(result)}`,
   },
   'lesson-functions': {
     starterCode: `function sum(a, b) {
   // 'a' and 'b' are parameters passed into this function
+  console.log('Adding', a, 'and', b);
   return a + b;
 }`,
     functionName: 'sum',
     args: [3, 4],
     params: [
-      { name: 'a', label: 'First number (a)', defaultValue: 3, type: 'number', options: [1, 3, 5, 10] },
-      { name: 'b', label: 'Second number (b)', defaultValue: 4, type: 'number', options: [2, 4, 8, 20] },
+      { name: 'a', label: 'First number (a)', defaultValue: 3, type: 'number', min: 0, max: 50, step: 1, options: [1, 3, 5, 10] },
+      { name: 'b', label: 'Second number (b)', defaultValue: 4, type: 'number', min: 0, max: 50, step: 1, options: [2, 4, 8, 20] },
     ],
     hint: 'Try selecting different input numbers or modifying the calculation inside sum(a, b), then press Run.',
     conceptNote: 'Functions take input values (arguments) and return a calculated result.',
+    miniGoal: {
+      description: 'Make sum(a, b) return 20 or more',
+      check: (result) => typeof result === 'number' && result >= 20,
+    },
+    quickSnippets: [
+      { label: '* 2', insert: ' * 2' },
+      { label: '+ 10', insert: ' + 10' },
+      { label: 'log(a, b)', insert: "\n  console.log('Inputs:', a, b);" },
+      { label: 'return (a + b) * 2;', insert: 'return (a + b) * 2;' },
+    ],
     explanationTemplate: (args, result) =>
       `Ran sum(${JSON.stringify(args[0])}, ${JSON.stringify(args[1])}) with your code -> Result returned: ${JSON.stringify(result)}`,
   },
@@ -143,6 +197,7 @@ const TRY_IT_BY_LESSON: Record<string, TryItConfig> = {
 const DEFAULT_TRY_IT: TryItConfig = {
   starterCode: `function greet(name) {
   // Returns a customized greeting string
+  console.log('Greeting user:', name);
   return 'Hello, ' + name + '!';
 }`,
   functionName: 'greet',
@@ -152,6 +207,15 @@ const DEFAULT_TRY_IT: TryItConfig = {
   ],
   hint: 'Edit the function or choose different input values and press Run to see what it returns.',
   conceptNote: 'Experiment with the code editor and watch live evaluation in action.',
+  miniGoal: {
+    description: 'Customize the greeting to return a friendly welcome message',
+    check: (result) => typeof result === 'string' && result.length > 5,
+  },
+  quickSnippets: [
+    { label: '+ " 🎉"', insert: ' + " 🎉"' },
+    { label: '.toUpperCase()', insert: '.toUpperCase()' },
+    { label: 'log(name)', insert: "\n  console.log('User name is:', name);" },
+  ],
   explanationTemplate: (args, result) =>
     `Ran greet(${JSON.stringify(args[0])}) with your code -> Result returned: ${JSON.stringify(result)}`,
 };
@@ -625,21 +689,26 @@ function TryItStep({
 }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const { showToast } = useToast();
 
   const [code, setCode] = useState(config.starterCode);
   const [currentArgs, setCurrentArgs] = useState<unknown[]>(config.args);
   const [running, setRunning] = useState(false);
+  const [goalMet, setGoalMet] = useState(false);
   const [output, setOutput] = useState<{
     ok: boolean;
     text: string;
     explanation?: string;
     evaluatedArgs: unknown[];
+    logs?: string[];
+    goalMet?: boolean;
   } | null>(null);
 
   useEffect(() => {
     setCode(config.starterCode);
     setCurrentArgs(config.args);
     setOutput(null);
+    setGoalMet(false);
   }, [config]);
 
   const updateArg = (index: number, val: unknown) => {
@@ -654,6 +723,19 @@ function TryItStep({
     setCode(config.starterCode);
     setCurrentArgs(config.args);
     setOutput(null);
+    setGoalMet(false);
+  };
+
+  const insertSnippet = (snippet: string) => {
+    setCode((prev) => {
+      if (snippet.startsWith('\n')) {
+        const lastReturn = prev.lastIndexOf('return');
+        if (lastReturn !== -1) {
+          return prev.slice(0, lastReturn) + snippet.trimStart() + '\n\n  ' + prev.slice(lastReturn);
+        }
+      }
+      return prev + snippet;
+    });
   };
 
   const run = async () => {
@@ -673,17 +755,27 @@ function TryItStep({
       const explanation = config.explanationTemplate
         ? config.explanationTemplate(argsToRun, result.value)
         : undefined;
+      const isGoalMet = config.miniGoal
+        ? config.miniGoal.check(result.value, argsToRun)
+        : false;
+      if (isGoalMet && !goalMet) {
+        setGoalMet(true);
+        showToast('🎯 Mini-Goal Completed! Great experimentation.', 'xp');
+      }
       setOutput({
         ok: true,
         text: JSON.stringify(result.value),
         explanation,
         evaluatedArgs: argsToRun,
+        logs: result.logs,
+        goalMet: isGoalMet,
       });
     } else {
       setOutput({
         ok: false,
         text: result.error,
         evaluatedArgs: argsToRun,
+        logs: result.logs,
       });
     }
 
@@ -694,6 +786,8 @@ function TryItStep({
     .map((a) => JSON.stringify(a))
     .join(', ')})`;
 
+  const snippets = config.quickSnippets ?? DEFAULT_SNIPPETS;
+
   return (
     <FadeInView style={styles.stepContent}>
       <SectionTitle
@@ -701,6 +795,36 @@ function TryItStep({
         title="Try it"
         subtitle={config.hint}
       />
+
+      {/* Mini-Goal Target Banner */}
+      {config.miniGoal && (
+        <View
+          style={[
+            styles.miniGoalCard,
+            goalMet && styles.miniGoalCardDone,
+          ]}
+        >
+          <View style={styles.miniGoalHeader}>
+            <Ionicons
+              name={goalMet ? 'checkmark-circle' : 'flag-outline'}
+              size={16}
+              color={goalMet ? colors.status.success : colors.accent.primary}
+            />
+            <AppText
+              variant="caption"
+              style={[
+                styles.miniGoalTag,
+                { color: goalMet ? colors.status.success : colors.accent.primary },
+              ]}
+            >
+              {goalMet ? 'MINI-GOAL ACHIEVED' : 'MINI-GOAL TARGET'}
+            </AppText>
+          </View>
+          <AppText variant="bodySmall" style={styles.miniGoalDesc}>
+            {config.miniGoal.description}
+          </AppText>
+        </View>
+      )}
 
       {config.conceptNote ? (
         <View style={styles.conceptNoteBox}>
@@ -724,6 +848,9 @@ function TryItStep({
           <View style={styles.paramsList}>
             {config.params.map((param, pIdx) => {
               const currentVal = currentArgs[pIdx] ?? param.defaultValue;
+              const isNumber = param.type === 'number';
+              const numVal = Number(currentVal);
+
               return (
                 <View key={param.name} style={styles.paramCard}>
                   <View style={styles.paramMeta}>
@@ -735,45 +862,103 @@ function TryItStep({
                     </AppText>
                   </View>
 
-                  {param.options && param.options.length > 0 ? (
-                    <View style={styles.paramOptions}>
-                      {param.options.map((opt, optIdx) => {
-                        const isSelected = currentVal === opt;
-                        return (
-                          <Pressable
-                            key={`${optIdx}-${String(opt)}`}
-                            onPress={() => updateArg(pIdx, opt)}
-                            style={[
-                              styles.paramPill,
-                              isSelected && styles.paramPillActive,
-                            ]}
-                          >
-                            <AppText
-                              variant="caption"
+                  <View style={styles.paramControlsRow}>
+                    {isNumber && (
+                      <View style={styles.stepperContainer}>
+                        <Pressable
+                          style={styles.stepperBtn}
+                          onPress={() =>
+                            updateArg(
+                              pIdx,
+                              Math.max(param.min ?? 0, numVal - (param.step ?? 1))
+                            )
+                          }
+                        >
+                          <Ionicons name="remove" size={14} color={colors.accent.primary} />
+                        </Pressable>
+                        <View style={styles.stepperDisplay}>
+                          <AppText variant="caption" style={styles.stepperValText}>
+                            {numVal}
+                          </AppText>
+                        </View>
+                        <Pressable
+                          style={styles.stepperBtn}
+                          onPress={() =>
+                            updateArg(
+                              pIdx,
+                              Math.min(param.max ?? 999, numVal + (param.step ?? 1))
+                            )
+                          }
+                        >
+                          <Ionicons name="add" size={14} color={colors.accent.primary} />
+                        </Pressable>
+                      </View>
+                    )}
+
+                    {param.options && param.options.length > 0 ? (
+                      <View style={styles.paramOptions}>
+                        {param.options.map((opt, optIdx) => {
+                          const isSelected = currentVal === opt;
+                          return (
+                            <Pressable
+                              key={`${optIdx}-${String(opt)}`}
+                              onPress={() => updateArg(pIdx, opt)}
                               style={[
-                                styles.paramPillText,
-                                isSelected && styles.paramPillTextActive,
+                                styles.paramPill,
+                                isSelected && styles.paramPillActive,
                               ]}
                             >
-                              {String(opt)}
-                            </AppText>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  ) : (
-                    <View style={styles.paramPillActive}>
-                      <AppText variant="caption" style={styles.paramPillTextActive}>
-                        {JSON.stringify(currentVal)}
-                      </AppText>
-                    </View>
-                  )}
+                              <AppText
+                                variant="caption"
+                                style={[
+                                  styles.paramPillText,
+                                  isSelected && styles.paramPillTextActive,
+                                ]}
+                              >
+                                {String(opt)}
+                              </AppText>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
               );
             })}
           </View>
         </View>
       )}
+
+      {/* Quick Insert Snippets Bar */}
+      <View style={styles.snippetsWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.snippetsScroll}
+        >
+          <View style={styles.snippetLabelBox}>
+            <Ionicons name="flash-outline" size={12} color={colors.accent.primary} />
+            <AppText variant="caption" style={styles.snippetLabel}>
+              Insert:
+            </AppText>
+          </View>
+          {snippets.map((snip, sIdx) => (
+            <Pressable
+              key={`${sIdx}-${snip.label}`}
+              onPress={() => insertSnippet(snip.insert)}
+              style={({ pressed }) => [
+                styles.snippetChip,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <AppText variant="caption" style={styles.snippetChipText}>
+                {snip.label}
+              </AppText>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
 
       {/* Code Editor */}
       <View style={styles.editorContainer}>
@@ -840,6 +1025,23 @@ function TryItStep({
           <AppText variant="code" style={styles.outputText}>
             {output.text}
           </AppText>
+
+          {/* Live Console Logs Terminal */}
+          {output.logs && output.logs.length > 0 && (
+            <View style={styles.terminalBox}>
+              <View style={styles.terminalHeader}>
+                <Ionicons name="terminal-outline" size={13} color={colors.accent.primary} />
+                <AppText variant="caption" style={styles.terminalTitle}>
+                  Console Output ({output.logs.length})
+                </AppText>
+              </View>
+              {output.logs.map((logMsg, lIdx) => (
+                <AppText key={lIdx} variant="code" style={styles.terminalText}>
+                  &gt; {logMsg}
+                </AppText>
+              ))}
+            </View>
+          )}
 
           {output.explanation ? (
             <View style={styles.outputExplanation}>
@@ -1878,6 +2080,38 @@ const makeStyles = (colors: ThemeColors) =>
       lineHeight: 20,
     },
 
+    miniGoalCard: {
+      padding: spacing.md,
+      backgroundColor: hexWithAlpha(colors.accent.primary, 0.08),
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: hexWithAlpha(colors.accent.primary, 0.25),
+      gap: 4,
+    },
+
+    miniGoalCardDone: {
+      backgroundColor: hexWithAlpha(colors.status.success, 0.12),
+      borderColor: hexWithAlpha(colors.status.success, 0.4),
+    },
+
+    miniGoalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+
+    miniGoalTag: {
+      fontWeight: '800',
+      letterSpacing: 0.6,
+      fontSize: 10,
+    },
+
+    miniGoalDesc: {
+      color: colors.text.primary,
+      fontWeight: '600',
+      lineHeight: 18,
+    },
+
     paramsCard: {
       padding: spacing.md,
       backgroundColor: colors.surface.primary,
@@ -1928,12 +2162,51 @@ const makeStyles = (colors: ThemeColors) =>
       flexShrink: 1,
     },
 
+    paramControlsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: spacing.sm,
+      marginTop: 2,
+    },
+
+    stepperContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderRadius: radius.sm,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+      backgroundColor: colors.surface.primary,
+      overflow: 'hidden',
+    },
+
+    stepperBtn: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 5,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    stepperDisplay: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      minWidth: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: hexWithAlpha(colors.accent.primary, 0.08),
+    },
+
+    stepperValText: {
+      fontFamily: typography.code.fontFamily,
+      fontWeight: '700',
+      color: colors.accent.primary,
+    },
+
     paramOptions: {
       flexDirection: 'row',
       alignItems: 'center',
       flexWrap: 'wrap',
       gap: spacing.xs,
-      marginTop: 2,
     },
 
     paramPill: {
@@ -1964,6 +2237,46 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.accent.primary,
       fontFamily: typography.code.fontFamily,
       fontWeight: '700',
+    },
+
+    snippetsWrapper: {
+      marginTop: 2,
+    },
+
+    snippetsScroll: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+      paddingVertical: 2,
+    },
+
+    snippetLabelBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      marginRight: 2,
+    },
+
+    snippetLabel: {
+      fontWeight: '700',
+      fontSize: 11,
+      color: colors.accent.primary,
+    },
+
+    snippetChip: {
+      paddingHorizontal: spacing.sm,
+      paddingVertical: 4,
+      borderRadius: radius.full,
+      backgroundColor: colors.surface.secondary,
+      borderWidth: 1,
+      borderColor: colors.border.default,
+    },
+
+    snippetChipText: {
+      fontFamily: typography.code.fontFamily,
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.text.primary,
     },
 
     editorHeaderLeft: {
@@ -2016,6 +2329,39 @@ const makeStyles = (colors: ThemeColors) =>
 
     outputText: {
       color: colors.text.primary,
+    },
+
+    terminalBox: {
+      marginTop: spacing.xs,
+      padding: spacing.sm,
+      borderRadius: radius.md,
+      backgroundColor: '#030712',
+      borderWidth: 1,
+      borderColor: 'rgba(56, 189, 248, 0.2)',
+      gap: 3,
+    },
+
+    terminalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      marginBottom: 3,
+      paddingBottom: 3,
+      borderBottomWidth: 1,
+      borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    },
+
+    terminalTitle: {
+      color: colors.accent.primary,
+      fontWeight: '700',
+      fontSize: 10,
+      letterSpacing: 0.5,
+    },
+
+    terminalText: {
+      color: '#4ADE80',
+      fontSize: 12,
+      lineHeight: 16,
     },
 
     outputExplanation: {

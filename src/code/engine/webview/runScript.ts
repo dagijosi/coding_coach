@@ -10,12 +10,14 @@ export type StudentCodeResult =
       status: 'success';
       value: unknown;
       executionTimeMs: number;
+      logs?: string[];
     }
   | {
       status: 'error';
       error: string;
       errorType: 'syntax' | 'runtime' | 'logical' | 'unknown';
       executionTimeMs: number;
+      logs?: string[];
     };
 
 function normalizeValue(value: unknown): unknown {
@@ -57,9 +59,20 @@ export function buildRunScript(task: StudentCodeTask): string {
     '  var payload = ' + payload + ';',
     '  ' + NORMALIZE_JS,
     '  var bridge = window.ReactNativeWebView;',
+    '  var capturedLogs = [];',
+    '  var oldLog = console.log;',
+    '  console.log = function () {',
+    '    try {',
+    '      var args = Array.prototype.slice.call(arguments);',
+    '      capturedLogs.push(args.map(function (a) { return typeof a === "object" ? JSON.stringify(a) : String(a); }).join(" "));',
+    '    } catch (e) {}',
+    '    if (oldLog) { oldLog.apply(console, arguments); }',
+    '  };',
     '  var post = function (result) {',
-    '    try { bridge.postMessage(JSON.stringify({ taskId: payload.taskId, result: result })); }',
-    '    catch (e) { /* If the native bridge is unavailable there is nowhere to report. */ }',
+    '    try {',
+    '      result.logs = capturedLogs;',
+    '      bridge.postMessage(JSON.stringify({ taskId: payload.taskId, result: result }));',
+    '    } catch (e) { /* If the native bridge is unavailable there is nowhere to report. */ }',
     '  };',
     '  var reportError = function (tag, msg, errorType) {',
     '    post({ status: "error", error: String(msg) + " [" + tag + "]", errorType: errorType, executionTimeMs: Date.now(), });',
