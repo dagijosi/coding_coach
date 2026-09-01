@@ -529,6 +529,20 @@ export default function LessonScreen() {
     });
   }, [lesson, currentIndex, steps.length]);
 
+  // Celebrate on lesson complete step and check for milestone achievements
+  useEffect(() => {
+    if (step?.kind === 'complete') {
+      setShowConfetti(true);
+      checkAndUnlockAchievements()
+        .then((newly) => {
+          if (newly.length > 0) {
+            showToast(`🏆 Badge Unlocked: ${newly[0].title}!`, 'success');
+          }
+        })
+        .catch(() => {});
+    }
+  }, [step?.kind, showToast]);
+
   if (loadError) {
     return (
       <Screen scroll={false}>
@@ -556,19 +570,6 @@ export default function LessonScreen() {
       </Screen>
     );
   }
-
-  useEffect(() => {
-    if (step?.kind === 'complete') {
-      setShowConfetti(true);
-      checkAndUnlockAchievements()
-        .then((newly) => {
-          if (newly.length > 0) {
-            showToast(`🏆 Badge Unlocked: ${newly[0].title}!`, 'success');
-          }
-        })
-        .catch(() => {});
-    }
-  }, [step?.kind]);
 
   const handleFinish = async () => {
     try {

@@ -5,7 +5,15 @@
 /**
  * Converts a hex color string (e.g., #FFFFFF or #FFF) and alpha value (0-1) into an rgba string.
  */
-export function hexWithAlpha(hex: string, alpha: number): string {
+export function hexWithAlpha(hex?: string | null, alpha: number = 1): string {
+  if (!hex || typeof hex !== 'string') {
+    return `rgba(0, 0, 0, ${Math.max(0, Math.min(1, alpha))})`;
+  }
+
+  if (hex.startsWith('rgba') || hex.startsWith('rgb')) {
+    return hex;
+  }
+
   const cleanHex = hex.replace('#', '');
   let r = 0;
   let g = 0;
@@ -28,7 +36,10 @@ export function hexWithAlpha(hex: string, alpha: number): string {
 /**
  * Appends a 2-character hex alpha (00-FF) directly to a 6-digit hex string.
  */
-export function hexWithHexAlpha(hex: string, alpha: number): string {
+export function hexWithHexAlpha(hex?: string | null, alpha: number = 1): string {
+  if (!hex || typeof hex !== 'string') {
+    return '#00000000';
+  }
   const cleanHex = hex.startsWith('#') ? hex : `#${hex}`;
   const clampedAlpha = Math.max(0, Math.min(1, alpha));
   const hexAlpha = Math.round(clampedAlpha * 255)
