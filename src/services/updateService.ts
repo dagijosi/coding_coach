@@ -41,7 +41,7 @@ let isManuallyPaused = false;
  * Returns the current runtime app version declared in app.config.ts / Constants.
  */
 export function getCurrentAppVersion(): string {
-  return Constants.expoConfig?.version ?? '1.0.6';
+  return Constants.expoConfig?.version ?? '1.0.7';
 }
 
 /**
