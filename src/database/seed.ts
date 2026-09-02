@@ -6,16 +6,19 @@ import {
 import { jsLearningContent } from '@/data/content/javascript';
 import { pythonLearningContent } from '@/data/content/python';
 import { typescriptLearningContent } from '@/data/content/typescript';
+import { frontendLearningContent } from '@/data/content/frontend';
+import { architectureLearningContent } from '@/data/content/architecture';
+import { aiEngineeringLearningContent } from '@/data/content/ai-engineering';
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 // Merge all language courses into one content bundle
 const allContent = {
-  courses:    [...jsLearningContent.courses,    ...pythonLearningContent.courses,    ...typescriptLearningContent.courses],
-  topics:     [...jsLearningContent.topics,     ...pythonLearningContent.topics,     ...typescriptLearningContent.topics],
-  lessons:    [...jsLearningContent.lessons,    ...pythonLearningContent.lessons,    ...typescriptLearningContent.lessons],
-  concepts:   [...jsLearningContent.concepts,   ...pythonLearningContent.concepts,   ...typescriptLearningContent.concepts],
-  problems:   [...jsLearningContent.problems,   ...pythonLearningContent.problems,   ...typescriptLearningContent.problems],
-  challenges: [...jsLearningContent.challenges, ...pythonLearningContent.challenges, ...typescriptLearningContent.challenges],
+  courses:    [...jsLearningContent.courses,    ...pythonLearningContent.courses,    ...typescriptLearningContent.courses,    ...frontendLearningContent.courses,    ...architectureLearningContent.courses,    ...aiEngineeringLearningContent.courses],
+  topics:     [...jsLearningContent.topics,     ...pythonLearningContent.topics,     ...typescriptLearningContent.topics,     ...frontendLearningContent.topics,     ...architectureLearningContent.topics,     ...aiEngineeringLearningContent.topics],
+  lessons:    [...jsLearningContent.lessons,    ...pythonLearningContent.lessons,    ...typescriptLearningContent.lessons,    ...frontendLearningContent.lessons,    ...architectureLearningContent.lessons,    ...aiEngineeringLearningContent.lessons],
+  concepts:   [...jsLearningContent.concepts,   ...pythonLearningContent.concepts,   ...typescriptLearningContent.concepts,   ...frontendLearningContent.concepts,   ...architectureLearningContent.concepts,   ...aiEngineeringLearningContent.concepts],
+  problems:   [...jsLearningContent.problems,   ...pythonLearningContent.problems,   ...typescriptLearningContent.problems,   ...frontendLearningContent.problems,   ...architectureLearningContent.problems,   ...aiEngineeringLearningContent.problems],
+  challenges: [...jsLearningContent.challenges, ...pythonLearningContent.challenges, ...typescriptLearningContent.challenges, ...frontendLearningContent.challenges, ...architectureLearningContent.challenges, ...aiEngineeringLearningContent.challenges],
 };
 
 

@@ -6,7 +6,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
  * the stored `content.version` value and only rewrites content when it
  * changes, instead of re-inserting every row on every app launch.
  */
-export const CONTENT_VERSION = 2;
+export const CONTENT_VERSION = 5;
 
 const METADATA_KEY = 'content.version';
 
